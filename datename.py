@@ -1,9 +1,43 @@
-#!python3
+#!/usr/bin/env python3
+
+import argparse
+
+class Formatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):
+    pass
+
+parser = argparse.ArgumentParser(
+        description='''Change file names based on their file/EXIF creation/modified date
+If you want to undo it, execute .datename_undo.sh or .datename_undo.bat
+
+Author: Kiyoon Kim (yoonkr33@gmail.com)''',
+        formatter_class=Formatter)
+parser.add_argument('input_files', type=str, nargs='+',
+        help='files you want to change names into dates')
+parser.add_argument('-p', '--prefix', type=str, default='',
+        help='prefix of the names')
+parser.add_argument('-d', '--date', type=str, default='EXIF', choices=["EXIF", "file_created", "file_modified"],
+        help='source of the date info')
+parser.add_argument('--undo', dest='undo', action='store_true',
+        help='make undo file (.datename_undo.sh or .datename_undo.bat)')
+parser.add_argument('--no-undo', dest='undo', action='store_false',
+        help='do not make undo file (.datename_undo.sh or .datename_undo.bat)')
+parser.set_defaults(undo=True)
+parser.add_argument('--save-exif', dest='save_exif', action='store_true',
+        help='save exif info in json files')
+parser.add_argument('--no-save-exif', dest='save_exif', action='store_false',
+        help='do not save exif info in json files')
+parser.set_defaults(save_exif=True)
+
+args = parser.parse_args()
+
+
 import os, sys
 import platform
-import getopt
 import glob
 from datetime import datetime
+
+import exiftool
+import pprint
 
 def creation_date(path_to_file):
     """
@@ -30,72 +64,55 @@ def modified_date(path_to_file):
         stat = os.stat(path_to_file)
         return stat.st_mtime
 
-def help():
-    print("Usage: %s [options..] [files..]" % sys.argv[0])
-    print("Author: Kiyoon Kim (yoonkr33@gmail.com)")
-    print("Description: Change file names based on their creation/modified date")
-    print()
-    print("Options:")
-    print(" -h, --help\t\tprint this help list")
-    print(" -m, --modified\t\tuse modified date instead of birth date")
-    print(" -p, --prefix SOMETEXT\tset prefix to SOMETEXT")
-    print()
-    print("if you want to undo it, execute .datename_undo.sh or .datename_undo.bat")
+
 
 if __name__ == "__main__":
-    try:
-        opts,args = getopt.getopt(sys.argv[1:], "hmp:", ["help", "modified=", "prefix="])
-    except getopt.GetoptError as err:
-        print(str(err))
-        sys.exit(2)
+    if args.undo:
+        if platform.system() == 'Windows':
+            undo_filename = '.datename_undo.bat'
+            undo_command = 'move'
+        else:
+            undo_filename = '.datename_undo.sh'
+            undo_command = 'mv'
+        undo = open(undo_filename, 'a')
 
-    num_options = 0
-    time_func = creation_date
-    prefix = ""
-    for opt, arg in opts:
-        if opt in ('-h', '--help'):
-            num_options += 1
-            help()
-            sys.exit()
-        elif opt in ('-m', '--modified'):
-            num_options += 1
-            time_func = modified_date
-        elif opt in ('-p', '--prefix'):
-            if opt == '-p':
-                num_options += 2
-            else:
-                num_options += 1
-            prefix = arg
-    
-    files = sys.argv[1+num_options:]
-    if not files:
-        help()
-        print("aa")
-        sys.exit(2)
+    for origpath in args.input_files:
+        for path in glob.glob(origpath):    # glob: Windows wildcard support
+            root, fname_ext = os.path.split(path)
+            fname, fext = os.path.splitext(fname_ext)
 
-    if platform.system() == 'Windows':
-        undo_filename = '.datename_undo.bat'
-        undo_command = 'move'
-    else:
-        undo_filename = '.datename_undo.sh'
-        undo_command = 'mv'
-    with open(undo_filename, 'a') as undo:
-        for origpath in files:
-            for path in glob.glob(origpath):    # glob: Windows wildcard support
-                root, fname_ext = os.path.split(path)
-                fname, fext = os.path.splitext(fname_ext)
+            if args.date == 'EXIF':
+                with exiftool.ExifTool() as et:
+                    metadata = et.get_metadata(path)
+                new_fname = metadata['Composite:SubSecCreateDate']
+            elif args.date == 'file_created':
+                new_fname = datetime.fromtimestamp(creation_date(path)).strftime('%Y%m%d_%H%M%S')
+            else:   # args.date == 'file_modified':
+                new_fname = datetime.fromtimestamp(modified_date(path)).strftime('%Y%m%d_%H%M%S')
 
-                new_fname = datetime.fromtimestamp(time_func(path)).strftime('%Y%m%d_%H%M%S')
-                new_path_wo_ext = os.path.join(root, prefix + new_fname)
-                new_path = new_path_wo_ext + fext
-                if os.path.isfile(new_path):
-                    counter = 2
+            new_path_wo_ext = os.path.join(root, args.prefix + new_fname)
+            new_path = new_path_wo_ext + fext
+            if os.path.isfile(new_path):
+                counter = 2
+                new_path = new_path_wo_ext + "_" + str(counter) + fext
+                while os.path.isfile(new_path):
+                    counter += 1
                     new_path = new_path_wo_ext + "_" + str(counter) + fext
-                    while os.path.isfile(new_path):
-                        counter += 1
-                        new_path = new_path_wo_ext + "_" + str(counter) + fext
 
-                print(path + " -> " + new_path)
-                os.rename(path, new_path)
+            print(path + " -> " + new_path)
+            os.rename(path, new_path)
+
+            if args.undo:
                 undo.write('%s "%s" "%s"\n' % (undo_command, new_path, path))
+            
+            if args.save_exif:
+                if args.date != 'EXIF':
+                    with exiftool.ExifTool() as et:
+                        metadata = et.get_metadata(path)
+
+                with open(new_path + '.json', 'w') as f:
+                    f.write(pprint.pformat(metadata, indent=4))
+
+    if args.undo:
+        undo.close()
 
