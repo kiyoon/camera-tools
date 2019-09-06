@@ -67,7 +67,12 @@ try:        # Py3k compatibility
 except NameError:
     basestring = (bytes, str)
 
-executable = os.path.dirname(os.path.realpath(__file__)) + "/exiftool"
+import platform
+if platform.system() == 'Windows':
+    executable = os.path.dirname(os.path.realpath(__file__)) + "\\exiftool.exe"
+else:
+    executable = os.path.dirname(os.path.realpath(__file__)) + "/exiftool"
+
 """The name of the executable to run.
 
 If the executable is not located in one of the paths listed in the

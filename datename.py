@@ -85,6 +85,8 @@ if __name__ == "__main__":
                 with exiftool.ExifTool() as et:
                     metadata = et.get_metadata(path)
                 new_fname = metadata['Composite:SubSecCreateDate']
+                new_fname = new_fname.replace(':', '')
+                new_fname = new_fname.replace(' ', '_')
             elif args.date == 'file_created':
                 new_fname = datetime.fromtimestamp(creation_date(path)).strftime('%Y%m%d_%H%M%S')
             else:   # args.date == 'file_modified':
