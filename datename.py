@@ -27,6 +27,11 @@ parser.add_argument('--save-exif', dest='save_exif', action='store_true',
 parser.add_argument('--no-save-exif', dest='save_exif', action='store_false',
         help='do not save exif info in json files')
 parser.set_defaults(save_exif=True)
+parser.add_argument('--rename-cr3', dest='rename_cr3', action='store_true',
+        help='rename .CR3 files along with the JPG files.')
+parser.add_argument('--no-rename-cr3', dest='rename_cr3', action='store_false',
+        help='do not rename .CR3 files along with the JPG files.')
+parser.set_defaults(rename_cr3=True)
 
 args = parser.parse_args()
 
@@ -65,6 +70,17 @@ def modified_date(path_to_file):
         return stat.st_mtime
 
 
+def path_no_overwrite_counter(path):
+    path_wo_ext, fext = os.path.splitext(path)
+    if os.path.isfile(path):
+        counter = 2
+        path = path_wo_ext + "_" + str(counter) + fext
+        while os.path.isfile(path):
+            counter += 1
+            path = path_wo_ext + "_" + str(counter) + fext
+
+    return path
+
 
 if __name__ == "__main__":
     if args.undo:
@@ -94,18 +110,23 @@ if __name__ == "__main__":
 
             new_path_wo_ext = os.path.join(root, args.prefix + new_fname)
             new_path = new_path_wo_ext + fext
-            if os.path.isfile(new_path):
-                counter = 2
-                new_path = new_path_wo_ext + "_" + str(counter) + fext
-                while os.path.isfile(new_path):
-                    counter += 1
-                    new_path = new_path_wo_ext + "_" + str(counter) + fext
+
+            new_path = path_no_overwrite_counter(new_path)
 
             print(path + " -> " + new_path)
             os.rename(path, new_path)
 
+            if args.rename_cr3 and fext.lower() in ["jpg", ".jpg"]:
+                cr3_path = os.path.join(root, fname + ".CR3")
+                cr3_new_path = new_path_wo_ext + ".CR3"
+                cr3_new_path = path_no_overwrite_counter(cr3_new_path)
+                print(cr3_path + " -> " + cr3_new_path)
+                os.rename(cr3_path, cr3_new_path)
+
             if args.undo:
                 undo.write('%s "%s" "%s"\n' % (undo_command, new_path, path))
+                if args.rename_cr3 and fext.lower() in ["jpg", ".jpg"]:
+                    undo.write('%s "%s" "%s"\n' % (undo_command, cr3_new_path, cr3_path))
             
             if args.save_exif:
                 if args.date != 'EXIF':
