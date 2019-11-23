@@ -17,6 +17,8 @@ parser.add_argument('-p', '--prefix', type=str, default='',
         help='prefix of the names')
 parser.add_argument('-d', '--date', type=str, default='EXIF', choices=["EXIF", "file_created", "file_modified"],
         help='source of the date info')
+parser.add_argument('-e', '--exif-date', type=str, default='Composite:SubSecCreateDate',
+        help='which EXIF data to use for the date. M50: Composite:SubSecCreateDate, Sony Cam: H264:DateTimeOriginal')
 parser.add_argument('--undo', dest='undo', action='store_true',
         help='make undo file (.datename_undo.sh or .datename_undo.bat)')
 parser.add_argument('--no-undo', dest='undo', action='store_false',
@@ -100,7 +102,7 @@ if __name__ == "__main__":
             if args.date == 'EXIF':
                 with exiftool.ExifTool() as et:
                     metadata = et.get_metadata(path)
-                new_fname = metadata['Composite:SubSecCreateDate']
+                new_fname = metadata[args.exif_date]
                 new_fname = new_fname.replace(':', '')
                 new_fname = new_fname.replace(' ', '_')
             elif args.date == 'file_created':
