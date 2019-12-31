@@ -40,6 +40,8 @@ Prefix, undo and save-exif are optional.
 
 `pip3 install coloredlogs verboselogs`
 
+ffmpeg with NVIDIA hardware acceleration enabled.
+
 ## Usage
 
 `backup_camera_dir_compress_video.py /home/user/Picture/Canon /home/user/onedrive/Photo/Canon`
