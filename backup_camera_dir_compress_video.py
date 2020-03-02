@@ -10,16 +10,35 @@ import exiftool
 
 EXIF_CAMERA_MODEL = 'EXIF:Model'
 #EXIF_VIDEO_WIDTH = "EXIF:RelatedImageWidth"
-EXIF_VIDEO_HEIGHT = "EXIF:RelatedImageHeight"
+#EXIF_VIDEO_HEIGHT = "EXIF:RelatedImageHeight"
+EXIF_VIDEO_HEIGHT = "QuickTime:ImageHeight"
 EXIF_VIDEO_FPS = "QuickTime:VideoFrameRate"
+EXIF_MKV_VIDEO_HEIGHT = "Matroska:ImageHeight"
+EXIF_MKV_VIDEO_FPS = "Matroska:VideoFrameRate"
 DOUBLE_BITRATE_FPS = [40,80]
 QUADRUPLE_BITRATE_FPS = [80, 150]
+import pprint
+
+EXIF_OBS_GRAPHICS_MODE = 'QuickTime:GraphicsMode'
+EXIF_OBS_TRACK2NAME = 'QuickTime:Track2Name'
+OBS_AUDIOTRACK_NAME = 'All (recording)'         # Assuming that the first audio track is names as this for all OBS videos.
+
+#COLOUR_RANGE_FULL = ["-color_range", "pc", "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709", "-pix_fmt", "yuvj420p"]
+COLOUR_RANGE_FULL = ["-color_range", "pc", "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709"]
+COLOUR_RANGE_LIMITED_NTSC = ["-color_range", "tv", "-colorspace", "smpte170m", "-color_trc", "smpte170m", "-color_primaries", "smpte170m", "-pix_fmt", "yuv420p"]
+COLOUR_RANGE_LIMITED_PAL = ["-color_range", "tv", "-colorspace", "bt470bg", "-color_trc", "gamma28", "-color_primaries", "bt470bg", "-pix_fmt", "yuv420p"]
+#COLOUR_RANGE_LIMITED_OBS = ["-color_range", "tv", "-colorspace", "bt470bg", "-color_trc", "bt709", "-color_primaries", "bt709", "-pix_fmt", "yuv420p"]
+COLOUR_RANGE_LIMITED_OBS = []
+
+
+FFPROBE = ["ffprobe", "-v", "error", "-show_streams", "-show_format", "-print_format", "json"]
 
 class Formatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):
     pass
 
 parser = argparse.ArgumentParser(
-        description='''Copy a directory, but skips the files that are already copied (note that it doesn't compare the file content but only performs os.stat() comparison) and skips CR3 files, and if there are Canon M50 videos then compress them using NVIDIA hardware acceleration. Written for backing up my photo and video collection taken with Canon M50. Full HD videos are encoded to bitrate 8000k, and 4K videos to 32000k. You can also change the desired bitrate optionally.
+        description='''Copy a directory, but skips the files that are already copied (note that it doesn't compare the file content but only performs os.stat() comparison) and skips CR3 files, and if there are Canon M50 videos then compress them using NVIDIA hardware acceleration. Written for backing up my photo and video collection taken with Canon M50. Full HD videos are encoded to bitrate 8000k, and 4K videos to 32000k. You can also change the desired bitrate optionally. We assume that all Canon videos have full range (pc) colour space, which is not true for some 10bit cameras (feature needs to be implemented).
+It can be used for OBS files when --detect is set to OBS. It'll detect the colour space (full or limited) and encode accordingly.
 Author: Kiyoon Kim (yoonkr33@gmail.com)''',
         formatter_class=Formatter)
 parser.add_argument('source_dir', type=str, 
@@ -34,6 +53,8 @@ parser.add_argument('-u', '--uhd_bitrate', type=int, default=32000,
         help='Kilo-bitrate for 4K videos. Double this if the frame rate is higher than 40')
 parser.add_argument('--exif_camera_model', type=str, default='Canon EOS M50',
         help='Bitrate for 4K videos')
+parser.add_argument('--detect', type=str, default='camera', choices=['camera', 'OBS'],
+        help='Whether to detect camera videos or OBS videos')
 parser.add_argument('--skip_ext', type=str, nargs='*', default=['CR3'],
         help='File extensions to skip')
 
@@ -42,7 +63,46 @@ args = parser.parse_args()
 class CopyFile(Exception): pass
 class DontCopyFile(Exception): pass
 
-def check_file_canon_video(source_file):
+import json
+def ffprobe(source_file):
+    proc = subprocess.Popen(FFPROBE + [source_file], stdout=subprocess.PIPE, shell=False)
+    (ffprobe_out, ffprobe_err) = proc.communicate()
+    ffprobe_out = ffprobe_out.decode('utf-8')
+    return json.loads(ffprobe_out)
+
+
+def check_file_OBS_video(source_file, ext):
+    """MP4 doesn't support an audio stream title, so we use exiftool to obtain this information.
+    On the other hand, we use ffprobe for MKV.
+    """
+    if ext == "mp4":
+        with exiftool.ExifTool() as et:
+            metadata = et.get_metadata(source_file)
+        pprint.pprint(metadata)
+
+        if EXIF_OBS_GRAPHICS_MODE in metadata.keys():
+            graphics_mode = metadata[EXIF_OBS_GRAPHICS_MODE]
+            print(graphics_mode)
+            if graphics_mode == 0:  # srcCopy
+
+                if EXIF_OBS_TRACK2NAME in metadata.keys():
+                    track2_name = metadata[EXIF_OBS_TRACK2NAME]
+                    if track2_name == OBS_AUDIOTRACK_NAME:  # Assuming that the first audio track is names as this for all OBS videos.
+                        ffprobe_out = ffprobe(source_file)
+                        return True, metadata, ffprobe_out
+    elif ext == "mkv":
+        with exiftool.ExifTool() as et:
+            metadata = et.get_metadata(source_file)
+
+        ffprobe_out = ffprobe(source_file)
+        print(ffprobe_out)
+        if ffprobe_out['streams'][1]['tags']['title'] == OBS_AUDIOTRACK_NAME:
+            # Assuming that the first audio track is names as this for all OBS videos.
+            return True, metadata, ffprobe_out
+
+    return False, None, None
+
+def check_file_canon_video(source_file, ext):
     if ext == "mp4":
         with exiftool.ExifTool() as et:
             metadata = et.get_metadata(source_file)
@@ -51,8 +111,8 @@ def check_file_canon_video(source_file):
             camera_model = metadata[EXIF_CAMERA_MODEL]
 
             if camera_model == args.exif_camera_model:  # Check if the video is taken from the predefined camera
-                return True, metadata
-    return False, None
+                return True, metadata, None
+    return False, None, None
 
 
 if __name__ == '__main__':
@@ -65,6 +125,8 @@ if __name__ == '__main__':
 
     logger.info("Creating directory: %s", args.destination_dir)
     os.makedirs(args.destination_dir, exist_ok=True)
+
+    check_file_canon_or_obs_video = check_file_canon_video if args.detect == 'camera' else check_file_OBS_video
 
     for root, dirs, files in os.walk(args.source_dir):
         dest_root = root.replace(args.source_dir, args.destination_dir, 1)
@@ -82,7 +144,7 @@ if __name__ == '__main__':
                 if filecmp.cmp(source_file,dest_file,shallow=True):     # doesn't compare file content
                     logger.info("Skipping file (already exists): %s", dest_file)
                 else:
-                    if check_file_canon_video(source_file)[0]:
+                    if check_file_canon_or_obs_video(source_file, ext)[0]:
                         logger.info("Skipping compressed video (warning: might not be encoded properly but not verifying): %s", dest_file)
                     else:
                         logger.error("File already exists but not identical: %s", dest_file)
@@ -95,11 +157,18 @@ if __name__ == '__main__':
                         logger.info("Skipping file (skip rule): %s", dest_file)
                         raise DontCopyFile()
 
-                    is_canon_video, metadata = check_file_canon_video(source_file)
+                    is_canon_video, metadata, ffprobe_out = check_file_canon_or_obs_video(source_file, ext)
                     if is_canon_video:
-                        #video_width = int(metadata[EXIF_VIDEO_WIDTH])
-                        video_height = int(metadata[EXIF_VIDEO_HEIGHT])
-                        video_fps = float(metadata[EXIF_VIDEO_FPS])
+                        if ext == "mp4":
+                            video_height = int(metadata[EXIF_VIDEO_HEIGHT])
+                            video_fps = float(metadata[EXIF_VIDEO_FPS])
+                        elif ext == "mkv":
+                            video_height = int(metadata[EXIF_MKV_VIDEO_HEIGHT])
+                            video_fps = float(metadata[EXIF_MKV_VIDEO_FPS])
+                            dest_file += ".mp4"
+                        else:
+                            raise Exception("Not supported file type")
+
                         #logger.warning("%d %d %f", video_width, video_height, video_fps)
                         if video_height == 720:
                             bitrate = args.hd_bitrate
@@ -118,9 +187,21 @@ if __name__ == '__main__':
                             bitrate *= 4
 
                         # ffmpeg
+                        if ffprobe_out is None:
+                            colour_range = COLOUR_RANGE_FULL
+                        elif ffprobe_out['streams'][0]['color_space'] == 'bt709':
+                            colour_range = COLOUR_RANGE_FULL
+                        elif ffprobe_out['streams'][0]['color_space'] == 'smpte170m':
+                            colour_range = COLOUR_RANGE_LIMITED_NTSC
+                        elif ffprobe_out['streams'][0]['color_space'] == 'bt470bg':
+                            colour_range = COLOUR_RANGE_LIMITED_PAL
+                            #colour_range = COLOUR_RANGE_FULL
                         
                         logger.info("Encoding video to %s", dest_file)
-                        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "info", "-hwaccel", "cuvid", "-c:v", "h264_cuvid", "-i", source_file, "-c:v", "h264_nvenc", "-rc:v", "vbr_hq", "-cq:v", "10", "-b:v", "%dk" % bitrate, "-maxrate:v", "%dk" % (bitrate * 2), "-profile:v", "high", "-color_range", "pc", "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709", "-c:a", "copy", dest_file])
+
+                        # -map 0 to copy all audio streams
+                        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "info", "-hwaccel", "cuvid", "-c:v", "h264_cuvid", "-i", source_file, "-c:v", "h264_nvenc", "-rc:v", "vbr_hq", "-cq:v", "10", "-b:v", "%dk" % bitrate, "-maxrate:v", "%dk" % (bitrate * 2), "-profile:v", "high"] + colour_range + ["-c:a", "copy", "-map", "0", dest_file])
+                        #subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "info", "-i", source_file, "-c:v", "libx264", "-rc:v", "vbr_hq", "-cq:v", "10", "-b:v", "%dk" % bitrate, "-maxrate:v", "%dk" % (bitrate * 2), "-profile:v", "high"] + colour_range + ["-c:a", "copy", "-map", "0", dest_file])
 
                         raise DontCopyFile()
 
