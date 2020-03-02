@@ -17,7 +17,6 @@ EXIF_MKV_VIDEO_HEIGHT = "Matroska:ImageHeight"
 EXIF_MKV_VIDEO_FPS = "Matroska:VideoFrameRate"
 DOUBLE_BITRATE_FPS = [40,80]
 QUADRUPLE_BITRATE_FPS = [80, 150]
-import pprint
 
 EXIF_OBS_GRAPHICS_MODE = 'QuickTime:GraphicsMode'
 EXIF_OBS_TRACK2NAME = 'QuickTime:Track2Name'
@@ -25,10 +24,17 @@ OBS_AUDIOTRACK_NAME = 'All (recording)'         # Assuming that the first audio 
 
 #COLOUR_RANGE_FULL = ["-color_range", "pc", "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709", "-pix_fmt", "yuvj420p"]
 COLOUR_RANGE_FULL = ["-color_range", "pc", "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709"]
-COLOUR_RANGE_LIMITED_NTSC = ["-color_range", "tv", "-colorspace", "smpte170m", "-color_trc", "smpte170m", "-color_primaries", "smpte170m", "-pix_fmt", "yuv420p"]
-COLOUR_RANGE_LIMITED_PAL = ["-color_range", "tv", "-colorspace", "bt470bg", "-color_trc", "gamma28", "-color_primaries", "bt470bg", "-pix_fmt", "yuv420p"]
-#COLOUR_RANGE_LIMITED_OBS = ["-color_range", "tv", "-colorspace", "bt470bg", "-color_trc", "bt709", "-color_primaries", "bt709", "-pix_fmt", "yuv420p"]
-COLOUR_RANGE_LIMITED_OBS = []
+#COLOUR_RANGE_LIMITED_NTSC = ["-color_range", "tv", "-colorspace", "smpte170m", "-color_trc", "smpte170m", "-color_primaries", "smpte170m", "-pix_fmt", "yuv420p"]
+#COLOUR_RANGE_LIMITED_PAL = ["-color_range", "tv", "-colorspace", "bt470bg", "-color_trc", "gamma28", "-color_primaries", "bt470bg", "-pix_fmt", "yuv420p"]
+
+"""
+if ffprobe_out['streams'][0]['color_space'] == 'bt709':
+    colour_range = COLOUR_RANGE_FULL
+elif ffprobe_out['streams'][0]['color_space'] == 'smpte170m':
+    colour_range = COLOUR_RANGE_LIMITED_NTSC
+elif ffprobe_out['streams'][0]['color_space'] == 'bt470bg':
+    colour_range = COLOUR_RANGE_LIMITED_PAL
+"""
 
 
 FFPROBE = ["ffprobe", "-v", "error", "-show_streams", "-show_format", "-print_format", "json"]
@@ -74,31 +80,31 @@ def ffprobe(source_file):
 def check_file_OBS_video(source_file, ext):
     """MP4 doesn't support an audio stream title, so we use exiftool to obtain this information.
     On the other hand, we use ffprobe for MKV.
+    Detects OBS video with the first audio trackname as "All (recording)" and the colour space is bt709 (full range).
     """
     if ext == "mp4":
         with exiftool.ExifTool() as et:
             metadata = et.get_metadata(source_file)
-        pprint.pprint(metadata)
 
         if EXIF_OBS_GRAPHICS_MODE in metadata.keys():
             graphics_mode = metadata[EXIF_OBS_GRAPHICS_MODE]
-            print(graphics_mode)
             if graphics_mode == 0:  # srcCopy
 
                 if EXIF_OBS_TRACK2NAME in metadata.keys():
                     track2_name = metadata[EXIF_OBS_TRACK2NAME]
                     if track2_name == OBS_AUDIOTRACK_NAME:  # Assuming that the first audio track is names as this for all OBS videos.
                         ffprobe_out = ffprobe(source_file)
-                        return True, metadata, ffprobe_out
+                        if ffprobe_out['streams'][0]['color_space'] == 'bt709':
+                            return True, metadata, ffprobe_out
     elif ext == "mkv":
         with exiftool.ExifTool() as et:
             metadata = et.get_metadata(source_file)
 
         ffprobe_out = ffprobe(source_file)
-        print(ffprobe_out)
         if ffprobe_out['streams'][1]['tags']['title'] == OBS_AUDIOTRACK_NAME:
             # Assuming that the first audio track is names as this for all OBS videos.
-            return True, metadata, ffprobe_out
+            if ffprobe_out['streams'][0]['color_space'] == 'bt709':
+                return True, metadata, ffprobe_out
 
     return False, None, None
 
@@ -140,6 +146,13 @@ if __name__ == '__main__':
             ext = os.path.splitext(name)[1][1:].lower()
             source_file = os.path.join(root, name)
             dest_file = os.path.join(dest_root, name)
+            
+            # Convert MKV to MP4 for OBS videos
+            if args.detect == 'OBS':
+                if ext == 'mkv':
+                    if check_file_canon_or_obs_video(source_file, ext)[0]:
+                        dest_file = dest_file[:-3] + 'mp4'
+
             if os.path.isfile(dest_file):
                 if filecmp.cmp(source_file,dest_file,shallow=True):     # doesn't compare file content
                     logger.info("Skipping file (already exists): %s", dest_file)
@@ -165,7 +178,6 @@ if __name__ == '__main__':
                         elif ext == "mkv":
                             video_height = int(metadata[EXIF_MKV_VIDEO_HEIGHT])
                             video_fps = float(metadata[EXIF_MKV_VIDEO_FPS])
-                            dest_file += ".mp4"
                         else:
                             raise Exception("Not supported file type")
 
@@ -187,20 +199,11 @@ if __name__ == '__main__':
                             bitrate *= 4
 
                         # ffmpeg
-                        if ffprobe_out is None:
-                            colour_range = COLOUR_RANGE_FULL
-                        elif ffprobe_out['streams'][0]['color_space'] == 'bt709':
-                            colour_range = COLOUR_RANGE_FULL
-                        elif ffprobe_out['streams'][0]['color_space'] == 'smpte170m':
-                            colour_range = COLOUR_RANGE_LIMITED_NTSC
-                        elif ffprobe_out['streams'][0]['color_space'] == 'bt470bg':
-                            colour_range = COLOUR_RANGE_LIMITED_PAL
-                            #colour_range = COLOUR_RANGE_FULL
-                        
                         logger.info("Encoding video to %s", dest_file)
 
                         # -map 0 to copy all audio streams
-                        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "info", "-hwaccel", "cuvid", "-c:v", "h264_cuvid", "-i", source_file, "-c:v", "h264_nvenc", "-rc:v", "vbr_hq", "-cq:v", "10", "-b:v", "%dk" % bitrate, "-maxrate:v", "%dk" % (bitrate * 2), "-profile:v", "high"] + colour_range + ["-c:a", "copy", "-map", "0", dest_file])
+                        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "info", "-hwaccel", "cuvid", "-c:v", "h264_cuvid", "-i", source_file, "-c:v", "h264_nvenc", "-rc:v", "vbr_hq", "-cq:v", "10", "-b:v", "%dk" % bitrate, "-maxrate:v", "%dk" % (bitrate * 2), "-profile:v", "high"] + COLOUR_RANGE_FULL + ["-c:a", "copy", "-map", "0", dest_file])
+                        # CPU
                         #subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "info", "-i", source_file, "-c:v", "libx264", "-rc:v", "vbr_hq", "-cq:v", "10", "-b:v", "%dk" % bitrate, "-maxrate:v", "%dk" % (bitrate * 2), "-profile:v", "high"] + colour_range + ["-c:a", "copy", "-map", "0", dest_file])
 
                         raise DontCopyFile()
