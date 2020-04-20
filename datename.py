@@ -33,6 +33,8 @@ parser.add_argument('--rename-cr3', dest='rename_cr3', action='store_true',
         help='rename .CR3 files along with the JPG files.')
 parser.add_argument('--no-rename-cr3', dest='rename_cr3', action='store_false',
         help='do not rename .CR3 files along with the JPG files.')
+parser.add_argument('--timezone', type=str,
+        help='change timezone (e.g. +0900 means Korea). Use when you forgot to reset the timezone when you were abroad. Leave it empty if you do not want to change the timezone.')
 parser.set_defaults(rename_cr3=True)
 
 args = parser.parse_args()
@@ -102,13 +104,21 @@ if __name__ == "__main__":
             if args.date == 'EXIF':
                 with exiftool.ExifTool() as et:
                     metadata = et.get_metadata(path)
-                new_fname = metadata[args.exif_date]
-                new_fname = new_fname.replace(':', '')
-                new_fname = new_fname.replace(' ', '_')
+                photo_date = datetime.strptime(metadata[args.exif_date], '%Y:%m:%d %H:%M:%S.%f%z')
+                #new_fname = metadata[args.exif_date]
+                #new_fname = new_fname.replace(':', '')
+                #new_fname = new_fname.replace(' ', '_')
             elif args.date == 'file_created':
-                new_fname = datetime.fromtimestamp(creation_date(path)).strftime('%Y%m%d_%H%M%S')
+                photo_date = datetime.fromtimestamp(creation_date(path))
             else:   # args.date == 'file_modified':
-                new_fname = datetime.fromtimestamp(modified_date(path)).strftime('%Y%m%d_%H%M%S')
+                photo_date = datetime.fromtimestamp(modified_date(path))
+
+            # Change timezone
+            if args.timezone:
+                new_timezone = datetime.strptime(args.timezone, '%z').tzinfo
+                photo_date = photo_date.astimezone(tz=new_timezone)
+
+            new_fname = photo_date.strftime('%Y%m%d_%H%M%S.%f')[:-4] + photo_date.strftime('%z')
 
             new_path_wo_ext = os.path.join(root, args.prefix + new_fname)
             new_path = new_path_wo_ext + fext
