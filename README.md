@@ -45,3 +45,16 @@ ffmpeg with NVIDIA hardware acceleration enabled.
 ## Usage
 
 `backup_camera_dir_compress_video.py /home/user/Picture/Canon /home/user/onedrive/Photo/Canon`
+
+
+
+# Bulk resize images
+
+## Requirements
+
+`pip3 install coloredlogs verboselogs pillow`
+
+
+## Usage
+
+`bulk_image_resize.py /home/user/Picture/Canon /home/user/Picture/Canon_resized`
