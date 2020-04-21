@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 from PIL import Image
+from PIL.ExifTags import TAGS
+import piexif
 
 import os
 import argparse
@@ -78,10 +80,18 @@ if __name__ == '__main__':
 
                 if ext in exts:
                     logger.info("Resizing file to: %s", dest_file)
- # My image is a 200x374 jpeg that is 102kb large
                     img = Image.open(source_file)
                     img = img.resize((args.width,args.height), resample=resample_str_to_pil_code(args.resample))
-                    img.save(dest_file, quality=args.quality)
+
+                    # Change EXIF resolution info.
+                    exif_dict = piexif.load(img.info['exif'])
+                    #exif_dict['0th'][piexif.ImageIFD.ImageWidth] = args.width
+                    #exif_dict['0th'][piexif.ImageIFD.ImageLength] = args.height
+                    exif_dict['Exif'][piexif.ExifIFD.PixelXDimension] = args.width
+                    exif_dict['Exif'][piexif.ExifIFD.PixelYDimension] = args.height
+                    exif_bytes = piexif.dump(exif_dict)
+                    
+                    img.save(dest_file, quality=args.quality, exif=exif_bytes)
 
     if nb_warning > 0:
         logger.warning("%d warning(s) found.", nb_warning)

@@ -52,7 +52,7 @@ ffmpeg with NVIDIA hardware acceleration enabled.
 
 ## Requirements
 
-`pip3 install coloredlogs verboselogs pillow`
+`pip3 install coloredlogs verboselogs pillow piexif`
 
 
 ## Usage
