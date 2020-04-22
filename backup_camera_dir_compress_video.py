@@ -129,6 +129,11 @@ if __name__ == '__main__':
     nb_error = 0
     nb_warning = 0
 
+    args.source_dir = args.source_dir.rstrip('\\')
+    args.source_dir = args.source_dir.rstrip('/')
+    args.destination_dir = args.destination_dir.rstrip('\\')
+    args.destination_dir = args.destination_dir.rstrip('/')
+    
     logger.info("Creating directory: %s", args.destination_dir)
     os.makedirs(args.destination_dir, exist_ok=True)
 
