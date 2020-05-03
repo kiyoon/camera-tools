@@ -20,10 +20,8 @@ parser.add_argument('source_dir', type=str,
         help='Directory to resize')
 parser.add_argument('destination_dir', type=str,
         help='Destination directory')
-parser.add_argument('-H', '--height', type=int, default=2000,
-        help='Output image height.')
-parser.add_argument('-W', '--width', type=int, default=3000,
-        help='Output image width.')
+parser.add_argument('-d', '--divide', type=int, default=2,
+        help='Output image resolution (width, height) is divided by this factor.')
 parser.add_argument('-q', '--quality', type=int, default=95,
         help='Output image jpeg quality.')
 parser.add_argument('-r', '--resample', type=str, choices=['nearest', 'bilinear', 'bicubic', 'lanczos'], default='bicubic',
@@ -86,14 +84,16 @@ if __name__ == '__main__':
                 if ext in exts:
                     logger.info("Resizing file to: %s", dest_file)
                     img = Image.open(source_file)
-                    img = img.resize((args.width,args.height), resample=resample_str_to_pil_code(args.resample))
+                    src_width, src_height = img.size
+                    dest_width, dest_height = src_width // args.divide, src_height // args.divide 
+                    img = img.resize((dest_width,dest_height), resample=resample_str_to_pil_code(args.resample))
 
                     # Change EXIF resolution info.
                     exif_dict = piexif.load(img.info['exif'])
                     #exif_dict['0th'][piexif.ImageIFD.ImageWidth] = args.width
                     #exif_dict['0th'][piexif.ImageIFD.ImageLength] = args.height
-                    exif_dict['Exif'][piexif.ExifIFD.PixelXDimension] = args.width
-                    exif_dict['Exif'][piexif.ExifIFD.PixelYDimension] = args.height
+                    exif_dict['Exif'][piexif.ExifIFD.PixelXDimension] = dest_width
+                    exif_dict['Exif'][piexif.ExifIFD.PixelYDimension] = dest_height
                     exif_bytes = piexif.dump(exif_dict)
                     
                     img.save(dest_file, quality=args.quality, exif=exif_bytes)
