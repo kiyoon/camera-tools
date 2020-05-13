@@ -61,7 +61,7 @@ parser.add_argument('--exif_camera_model', type=str, default='Canon EOS M50',
         help='Bitrate for 4K videos')
 parser.add_argument('--detect', type=str, default='camera', choices=['camera', 'OBS'],
         help='Whether to detect camera videos or OBS videos')
-parser.add_argument('--skip_ext', type=str, nargs='*', default=['CR3'],
+parser.add_argument('--skip_ext', type=str, nargs='*', default=['CR3', 'ARW'],
         help='File extensions to skip')
 
 args = parser.parse_args()

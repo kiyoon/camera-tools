@@ -18,7 +18,7 @@ parser.add_argument('-p', '--prefix', type=str, default='',
 parser.add_argument('-d', '--date', type=str, default='EXIF', choices=["EXIF", "file_created", "file_modified"],
         help='source of the date info')
 parser.add_argument('-e', '--exif-date', type=str, default='Composite:SubSecCreateDate',
-        help='which EXIF data to use for the date. M50: Composite:SubSecCreateDate, Sony Cam: H264:DateTimeOriginal')
+        help='which EXIF data to use for the date. M50: Composite:SubSecCreateDate, Sony Cam: H264:DateTimeOriginal, Sony a6000: MakerNotes:SonyDateTime')
 parser.add_argument('--undo', dest='undo', action='store_true',
         help='make undo file (.datename_undo.sh or .datename_undo.bat)')
 parser.add_argument('--no-undo', dest='undo', action='store_false',
@@ -29,13 +29,14 @@ parser.add_argument('--save-exif', dest='save_exif', action='store_true',
 parser.add_argument('--no-save-exif', dest='save_exif', action='store_false',
         help='do not save exif info in json files')
 parser.set_defaults(save_exif=True)
-parser.add_argument('--rename-cr3', dest='rename_cr3', action='store_true',
-        help='rename .CR3 files along with the JPG files.')
-parser.add_argument('--no-rename-cr3', dest='rename_cr3', action='store_false',
-        help='do not rename .CR3 files along with the JPG files.')
+parser.add_argument('--rename-raw', dest='rename_raw', action='store_true',
+        help='rename RAW files along with the JPG files.')
+parser.add_argument('--no-rename-raw', dest='rename_raw', action='store_false',
+        help='do not rename RAW files along with the JPG files.')
+parser.add_argument('--raw-ext', type=str, default='CR3')
 parser.add_argument('--timezone', type=str,
         help='change timezone (e.g. +0900 means Korea). Use when you forgot to reset the timezone when you were abroad. Leave it empty if you do not want to change the timezone.')
-parser.set_defaults(rename_cr3=True)
+parser.set_defaults(rename_raw=True)
 
 args = parser.parse_args()
 
@@ -74,14 +75,14 @@ def modified_date(path_to_file):
         return stat.st_mtime
 
 
-def path_no_overwrite_counter(path):
+def path_no_overwrite_counter(path, zfill=2):
     path_wo_ext, fext = os.path.splitext(path)
     if os.path.isfile(path):
         counter = 2
-        path = path_wo_ext + "_" + str(counter) + fext
+        path = path_wo_ext + "_" + str(counter).zfill(zfill) + fext
         while os.path.isfile(path):
             counter += 1
-            path = path_wo_ext + "_" + str(counter) + fext
+            path = path_wo_ext + "_" + str(counter).zfill(zfill) + fext
 
     return path
 
@@ -104,6 +105,7 @@ if __name__ == "__main__":
             if args.date == 'EXIF':
                 with exiftool.ExifTool() as et:
                     metadata = et.get_metadata(path)
+                print(metadata)
                 photo_date = datetime.strptime(metadata[args.exif_date], '%Y:%m:%d %H:%M:%S.%f%z')
                 #new_fname = metadata[args.exif_date]
                 #new_fname = new_fname.replace(':', '')
@@ -128,22 +130,22 @@ if __name__ == "__main__":
             print(path + " -> " + new_path)
             os.rename(path, new_path)
 
-            if args.rename_cr3 and fext.lower() in ["jpg", ".jpg"]:
-                cr3_path = os.path.join(root, fname + ".CR3")
-                cr3_new_path = new_path_wo_ext + ".CR3"
-                cr3_new_path = path_no_overwrite_counter(cr3_new_path)
-                print(cr3_path + " -> " + cr3_new_path)
-                os.rename(cr3_path, cr3_new_path)
+            if args.rename_raw and fext.lower() in ["jpg", ".jpg"]:
+                raw_path = os.path.join(root, fname + "." + args.raw_ext)
+                raw_new_path = new_path_wo_ext + "." + args.raw_ext
+                raw_new_path = path_no_overwrite_counter(raw_new_path)
+                print(raw_path + " -> " + raw_new_path)
+                os.rename(raw_path, raw_new_path)
 
             if args.undo:
                 undo.write('%s "%s" "%s"\n' % (undo_command, new_path, path))
-                if args.rename_cr3 and fext.lower() in ["jpg", ".jpg"]:
-                    undo.write('%s "%s" "%s"\n' % (undo_command, cr3_new_path, cr3_path))
+                if args.rename_raw and fext.lower() in ["jpg", ".jpg"]:
+                    undo.write('%s "%s" "%s"\n' % (undo_command, raw_new_path, raw_path))
             
             if args.save_exif:
                 if args.date != 'EXIF':
                     with exiftool.ExifTool() as et:
-                        metadata = et.get_metadata(path)
+                        metadata = et.get_metadata(new_path)
 
                 with open(new_path + '.json', 'w') as f:
                     f.write(pprint.pformat(metadata, indent=4))
