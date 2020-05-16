@@ -105,7 +105,6 @@ if __name__ == "__main__":
             if args.date == 'EXIF':
                 with exiftool.ExifTool() as et:
                     metadata = et.get_metadata(path)
-                print(metadata)
                 photo_date = datetime.strptime(metadata[args.exif_date], '%Y:%m:%d %H:%M:%S.%f%z')
                 #new_fname = metadata[args.exif_date]
                 #new_fname = new_fname.replace(':', '')
