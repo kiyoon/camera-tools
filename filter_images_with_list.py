@@ -23,8 +23,12 @@ parser.add_argument('image_list', type=str,
         help='Path to an image list file.')
 parser.add_argument('--encoding', type=str, default='utf-16',
         help='Set file encoding for the image list.')
-parser.add_argument('--copy_json_cr3', action='store_true',
-        help='Copy the json and CR3 files together with the images.')
+parser.add_argument('--copy_json', action='store_true',
+        help='Copy the json files together with the images.')
+parser.add_argument('--copy_cr3', action='store_true',
+        help='Copy the CR3 files together with the images.')
+parser.add_argument('--copy_arw', action='store_true',
+        help='Copy the ARW files together with the images.')
 
 args = parser.parse_args()
 
@@ -66,14 +70,20 @@ if __name__ == '__main__':
     for image_name in image_name_list:
         nb_error += not copy_file(args.source_dir, args.destination_dir, image_name)
 
-        if args.copy_json_cr3:
+        if args.copy_json:
             # JSON
             json_name = image_name + '.json'
             nb_error += not copy_file(args.source_dir, args.destination_dir, json_name)
 
+        if args.copy_cr3:
             # CR3
             cr3_name = os.path.splitext(image_name)[0] + '.CR3'
             nb_error += not copy_file(args.source_dir, args.destination_dir, cr3_name)
+
+        if args.copy_arw:
+            # CR3
+            arw_name = os.path.splitext(image_name)[0] + '.ARW'
+            nb_error += not copy_file(args.source_dir, args.destination_dir, arw_name)
 
     if nb_warning > 0:
         logger.warning("%d warning(s) found.", nb_warning)
