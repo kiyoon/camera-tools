@@ -57,8 +57,6 @@ parser.add_argument('-f', '--fullhd_bitrate', type=int, default=8000,
         help='Kilo-bitrate for Full HD videos. Double this if the frame rate is higher than 40.')
 parser.add_argument('-u', '--uhd_bitrate', type=int, default=32000,
         help='Kilo-bitrate for 4K videos. Double this if the frame rate is higher than 40')
-parser.add_argument('--exif_camera_model', type=str, default='Canon EOS M50',
-        help='Bitrate for 4K videos')
 parser.add_argument('--detect', type=str, default='camera', choices=['camera', 'OBS'],
         help='Whether to detect camera videos or OBS videos')
 parser.add_argument('--skip_ext', type=str, nargs='*', default=['CR3', 'ARW'],
@@ -104,11 +102,11 @@ def check_file_OBS_video(source_file, ext):
         if ffprobe_out['streams'][1]['tags']['title'] == OBS_AUDIOTRACK_NAME:
             # Assuming that the first audio track is names as this for all OBS videos.
             if ffprobe_out['streams'][0]['color_space'] == 'bt709':
-                return True, metadata, ffprobe_out
+                return 'OBS', metadata, ffprobe_out
 
-    return False, None, None
+    return 'unknown', None, None
 
-def check_file_canon_video(source_file, ext):
+def check_file_M50_video(source_file, ext):
     if ext == "mp4":
         with exiftool.ExifTool() as et:
             metadata = et.get_metadata(source_file)
@@ -116,9 +114,30 @@ def check_file_canon_video(source_file, ext):
         if EXIF_CAMERA_MODEL in metadata.keys():
             camera_model = metadata[EXIF_CAMERA_MODEL]
 
-            if camera_model == args.exif_camera_model:  # Check if the video is taken from the predefined camera
-                return True, metadata, None
-    return False, None, None
+            if camera_model == 'Canon EOS M50':  # Check if the video is taken from the predefined camera
+                return 'M50', metadata, None
+    return 'unknown', None, None
+
+def check_file_a6000_video(source_file, ext):
+    if ext == "mp4":
+        with exiftool.ExifTool() as et:
+            metadata = et.get_metadata(source_file)
+
+        EXIF_MANUFACTURER = 'XML:DeviceManufacturer'
+        if EXIF_MANUFACTURER in metadata.keys():
+            manufacturer = metadata[EXIF_MANUFACTURER]
+
+            if manufacturer == 'Sony':  # Check if the video is taken from the predefined camera
+                return 'a6000', metadata, None
+    return 'unknown', None, None
+
+
+def check_file_camera_video(source_file, ext):
+    brand, metadata, _ = check_file_M50_video(source_file, ext)
+    if brand == 'unknown':
+        brand, metadata, _ = check_file_a6000_video(source_file, ext)
+
+    return brand, metadata, None
 
 
 if __name__ == '__main__':
@@ -137,7 +156,7 @@ if __name__ == '__main__':
     logger.info("Creating directory: %s", args.destination_dir)
     os.makedirs(args.destination_dir, exist_ok=True)
 
-    check_file_canon_or_obs_video = check_file_canon_video if args.detect == 'camera' else check_file_OBS_video
+    check_file_camera_or_obs_video = check_file_camera_video if args.detect == 'camera' else check_file_OBS_video
 
     for root, dirs, files in os.walk(args.source_dir):
         dest_root = root.replace(args.source_dir, args.destination_dir, 1)
@@ -155,14 +174,14 @@ if __name__ == '__main__':
             # Convert MKV to MP4 for OBS videos
             if args.detect == 'OBS':
                 if ext == 'mkv':
-                    if check_file_canon_or_obs_video(source_file, ext)[0]:
+                    if check_file_camera_or_obs_video(source_file, ext)[0] == 'OBS':
                         dest_file = dest_file[:-3] + 'mp4'
 
             if os.path.isfile(dest_file):
                 if filecmp.cmp(source_file,dest_file,shallow=True):     # doesn't compare file content
                     logger.info("Skipping file (already exists): %s", dest_file)
                 else:
-                    if check_file_canon_or_obs_video(source_file, ext)[0]:
+                    if check_file_camera_or_obs_video(source_file, ext)[0] != 'unknown':
                         logger.info("Skipping compressed video (warning: might not be encoded properly but not verifying): %s", dest_file)
                     else:
                         logger.error("File already exists but not identical: %s", dest_file)
@@ -175,8 +194,8 @@ if __name__ == '__main__':
                         logger.info("Skipping file (skip rule): %s", dest_file)
                         raise DontCopyFile()
 
-                    is_canon_video, metadata, ffprobe_out = check_file_canon_or_obs_video(source_file, ext)
-                    if is_canon_video:
+                    camera_brand, metadata, ffprobe_out = check_file_camera_or_obs_video(source_file, ext)
+                    if camera_brand != 'unknown':
                         if ext == "mp4":
                             video_height = int(metadata[EXIF_VIDEO_HEIGHT])
                             video_fps = float(metadata[EXIF_VIDEO_FPS])
@@ -206,8 +225,28 @@ if __name__ == '__main__':
                         # ffmpeg
                         logger.info("Encoding video to %s", dest_file)
 
-                        # -map 0 to copy all audio streams
-                        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "info", "-hwaccel", "cuvid", "-c:v", "h264_cuvid", "-i", source_file, "-c:v", "h264_nvenc", "-rc:v", "vbr_hq", "-cq:v", "10", "-b:v", "%dk" % bitrate, "-maxrate:v", "%dk" % (bitrate * 2), "-profile:v", "high"] + COLOUR_RANGE_FULL + ["-c:a", "copy", "-map", "0", dest_file])
+                        ffmpeg_cmd_head = ["ffmpeg", "-hide_banner", "-loglevel", "info"]
+                        ffmpeg_cmd_nvdecode = ["-hwaccel", "cuvid", "-c:v", "h264_cuvid"]
+                        ffmpeg_cmd_video = ["-i", source_file, "-c:v", "h264_nvenc", "-rc:v", "vbr_hq", "-cq:v", "10", "-b:v", "%dk" % bitrate, "-maxrate:v", "%dk" % (bitrate * 2), "-profile:v", "high"] + COLOUR_RANGE_FULL
+
+                        # -map 0 to copy all audio streams (and possibly metadata?)
+                        ffmpeg_cmd_audio_copy = ["-c:a", "copy", "-map", "0"]
+                        # (a6000 has time metadata, but dropping it because -movflags use_metadata_tags and -map_metadata 0 didn't work)
+                        # libfdk_aac codec has a higher quality (but defaults to a low-pass filter of 14kHz), so consider using it in case you have it enabled.
+                        ffmpeg_cmd_audio_aac = ["-c:a", "aac", "-b:a", "256k", "-ar", "48000"]
+                        ffmpeg_cmd_output = [dest_file]
+                        if camera_brand == 'M50':
+                            # h264 nvidia decode, encode
+                            # copy audio
+                            ffmpeg_cmd = ffmpeg_cmd_head + ffmpeg_cmd_nvdecode + ffmpeg_cmd_video + ffmpeg_cmd_audio_copy + ffmpeg_cmd_output
+                        elif camera_brand == 'a6000':
+                            # h264 nvidia decode, encode
+                            # audio aac 256k
+                            ffmpeg_cmd = ffmpeg_cmd_head + ffmpeg_cmd_nvdecode + ffmpeg_cmd_video + ffmpeg_cmd_audio_aac + ffmpeg_cmd_output
+
+
+                        subprocess.run(ffmpeg_cmd,
+                                check=True)
                         # CPU
                         #subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "info", "-i", source_file, "-c:v", "libx264", "-rc:v", "vbr_hq", "-cq:v", "10", "-b:v", "%dk" % bitrate, "-maxrate:v", "%dk" % (bitrate * 2), "-profile:v", "high"] + colour_range + ["-c:a", "copy", "-map", "0", dest_file])
 
@@ -225,6 +264,9 @@ if __name__ == '__main__':
                 except subprocess.CalledProcessError:
                     logger.error("ffmpeg exited with non-zero return code: %s", dest_file)
                     nb_error += 1
+                    logger.info("Removing %s", dest_file)
+                    os.remove(dest_file)
+
 
 
 

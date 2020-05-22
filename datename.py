@@ -14,11 +14,13 @@ Author: Kiyoon Kim (yoonkr33@gmail.com)''',
 parser.add_argument('input_files', type=str, nargs='+',
         help='files you want to change names into dates')
 parser.add_argument('-p', '--prefix', type=str, default='',
-        help='prefix of the names')
+        help='prefix of the output names')
 parser.add_argument('-d', '--date', type=str, default='EXIF', choices=["EXIF", "file_created", "file_modified"],
         help='source of the date info')
 parser.add_argument('-e', '--exif-date', type=str, default='Composite:SubSecCreateDate',
-        help='which EXIF data to use for the date. M50: Composite:SubSecCreateDate, Sony Cam: H264:DateTimeOriginal, Sony a6000: MakerNotes:SonyDateTime')
+        help='which EXIF data to use for the date. M50: Composite:SubSecCreateDate, Sony Cam: H264:DateTimeOriginal, Sony a6000: MakerNotes:SonyDateTime, Sony a6000 videos: XML:CreationDateValue')
+parser.add_argument('--exif-date-format', type=str, default='%Y:%m:%d %H:%M:%S.%f%z',
+        help='EXIF date format for reading the time. M50: %Y:%m:%d %H:%M:%S.%f%z, Sony a6000: %Y:%m:%d %H:%M:%S%z')
 parser.add_argument('--undo', dest='undo', action='store_true',
         help='make undo file (.datename_undo.sh or .datename_undo.bat)')
 parser.add_argument('--no-undo', dest='undo', action='store_false',
@@ -105,7 +107,7 @@ if __name__ == "__main__":
             if args.date == 'EXIF':
                 with exiftool.ExifTool() as et:
                     metadata = et.get_metadata(path)
-                photo_date = datetime.strptime(metadata[args.exif_date], '%Y:%m:%d %H:%M:%S.%f%z')
+                photo_date = datetime.strptime(metadata[args.exif_date], args.exif_date_format)
                 #new_fname = metadata[args.exif_date]
                 #new_fname = new_fname.replace(':', '')
                 #new_fname = new_fname.replace(' ', '_')
