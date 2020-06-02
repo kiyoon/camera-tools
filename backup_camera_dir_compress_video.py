@@ -262,10 +262,19 @@ if __name__ == '__main__':
                     pass
 
                 except subprocess.CalledProcessError:
-                    logger.error("ffmpeg exited with non-zero return code: %s", dest_file)
+                    logger.exception("ffmpeg exited with non-zero return code: %s", dest_file)
                     nb_error += 1
                     logger.info("Removing %s", dest_file)
                     os.remove(dest_file)
+
+                except json.decoder.JSONDecodeError:
+                    logger.warning("Cannot identify metadata from video: %s.", source_file)
+                    if os.path.isfile(dest_file):
+                        logger.warning("Destination file already exists. Skipping")
+                    else:
+                        logger.warning("Copying file to: %s", dest_file)
+                        copy2(source_file, dest_file)
+                    nb_warning += 1
 
 
 
