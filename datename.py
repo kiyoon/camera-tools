@@ -20,7 +20,7 @@ parser.add_argument('-d', '--date', type=str, default='EXIF', choices=["EXIF", "
 parser.add_argument('-e', '--exif-date', type=str, default='Composite:SubSecCreateDate',
         help='which EXIF data to use for the date. M50: Composite:SubSecCreateDate, Sony Cam: H264:DateTimeOriginal, Sony a6000: MakerNotes:SonyDateTime, Sony a6000 videos: XML:CreationDateValue')
 parser.add_argument('--exif-date-format', type=str, default='%Y:%m:%d %H:%M:%S.%f%z',
-        help='EXIF date format for reading the time. M50: %Y:%m:%d %H:%M:%S.%f%z, Sony a6000: %Y:%m:%d %H:%M:%S%z')
+        help='EXIF date format for reading the time. M50: %%Y:%%m:%%d %%H:%%M:%%S.%%f%%z, Sony a6000: %%Y:%%m:%%d %%H:%%M:%%S%%z')
 parser.add_argument('--undo', dest='undo', action='store_true',
         help='make undo file (.datename_undo.sh or .datename_undo.bat)')
 parser.add_argument('--no-undo', dest='undo', action='store_false',
@@ -50,6 +50,8 @@ from datetime import datetime
 
 import exiftool
 import pprint
+
+import tqdm
 
 def creation_date(path_to_file):
     """
@@ -99,6 +101,13 @@ if __name__ == "__main__":
             undo_command = 'mv'
         undo = open(undo_filename, 'a')
 
+    num_jpg_files = 0
+    for origpath in args.input_files:
+        for path in glob.glob(origpath):    # glob: Windows wildcard support
+            num_jpg_files += 1
+
+    progress = tqdm.tqdm(desc='Renaming', total=num_jpg_files)
+
     for origpath in args.input_files:
         for path in glob.glob(origpath):    # glob: Windows wildcard support
             root, fname_ext = os.path.split(path)
@@ -128,7 +137,8 @@ if __name__ == "__main__":
 
             new_path = path_no_overwrite_counter(new_path)
 
-            print(path + " -> " + new_path)
+            #print(path + " -> " + new_path)
+            tqdm.tqdm.write(path + " -> " + new_path)
             os.rename(path, new_path)
 
             if args.rename_raw and fext.lower() in ["jpg", ".jpg"]:
@@ -150,6 +160,8 @@ if __name__ == "__main__":
 
                 with open(new_path + '.json', 'w') as f:
                     f.write(pprint.pformat(metadata, indent=4))
+
+            progress.update(1)
 
     if args.undo:
         undo.close()
