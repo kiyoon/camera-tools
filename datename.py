@@ -145,7 +145,8 @@ if __name__ == "__main__":
                 raw_path = os.path.join(root, fname + "." + args.raw_ext)
                 raw_new_path = new_path_wo_ext + "." + args.raw_ext
                 raw_new_path = path_no_overwrite_counter(raw_new_path)
-                print(raw_path + " -> " + raw_new_path)
+                #print(raw_path + " -> " + raw_new_path)
+                tqdm.tqdm.write(raw_path + " -> " + raw_new_path)
                 os.rename(raw_path, raw_new_path)
 
             if args.undo:
