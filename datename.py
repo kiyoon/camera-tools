@@ -20,7 +20,7 @@ parser.add_argument('-d', '--date', type=str, default='EXIF', choices=["EXIF", "
 parser.add_argument('-e', '--exif-date', type=str, default='Composite:SubSecCreateDate',
         help='which EXIF data to use for the date. M50: Composite:SubSecCreateDate, Sony Cam: H264:DateTimeOriginal, Sony a6000: MakerNotes:SonyDateTime, Sony a6000 videos: XML:CreationDateValue')
 parser.add_argument('--exif-date-format', type=str, default='%Y:%m:%d %H:%M:%S.%f%z',
-        help='EXIF date format for reading the time. M50: %%Y:%%m:%%d %%H:%%M:%%S.%%f%%z, Sony a6000: %%Y:%%m:%%d %%H:%%M:%%S%%z')
+        help='EXIF date format for reading the time. M50: %%Y:%%m:%%d %%H:%%M:%%S.%%f%%z, Sony a6000/Handycam: %%Y:%%m:%%d %%H:%%M:%%S%%z')
 parser.add_argument('--undo', dest='undo', action='store_true',
         help='make undo file (.datename_undo.sh or .datename_undo.bat)')
 parser.add_argument('--no-undo', dest='undo', action='store_false',
@@ -141,17 +141,20 @@ if __name__ == "__main__":
             tqdm.tqdm.write(path + " -> " + new_path)
             os.rename(path, new_path)
 
+            raw_renamed = False
             if args.rename_raw and fext.lower() in ["jpg", ".jpg"]:
                 raw_path = os.path.join(root, fname + "." + args.raw_ext)
-                raw_new_path = new_path_wo_ext + "." + args.raw_ext
-                raw_new_path = path_no_overwrite_counter(raw_new_path)
-                #print(raw_path + " -> " + raw_new_path)
-                tqdm.tqdm.write(raw_path + " -> " + raw_new_path)
-                os.rename(raw_path, raw_new_path)
+                if os.path.exists(raw_path):
+                    raw_new_path = new_path_wo_ext + "." + args.raw_ext
+                    raw_new_path = path_no_overwrite_counter(raw_new_path)
+                    #print(raw_path + " -> " + raw_new_path)
+                    tqdm.tqdm.write(raw_path + " -> " + raw_new_path)
+                    os.rename(raw_path, raw_new_path)
+                    raw_renamed = True
 
             if args.undo:
                 undo.write('%s "%s" "%s"\n' % (undo_command, new_path, path))
-                if args.rename_raw and fext.lower() in ["jpg", ".jpg"]:
+                if raw_renamed:
                     undo.write('%s "%s" "%s"\n' % (undo_command, raw_new_path, raw_path))
             
             if args.save_exif:
