@@ -9,6 +9,9 @@ import argparse
 import coloredlogs, logging, verboselogs
 
 
+from utils.burn_signature import watermark_signature
+from utils.pil_transpose import exif_transpose_delete_exif
+
 class Formatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):
     pass
 
@@ -26,6 +29,8 @@ parser.add_argument('-q', '--quality', type=int, default=95,
         help='Output image jpeg quality.')
 parser.add_argument('-r', '--resample', type=str, choices=['nearest', 'bilinear', 'bicubic', 'lanczos'], default='bicubic',
         help='Resampling algorithm.')
+parser.add_argument('-w', '--watermark', action='store_true',
+        help='Watermark Instagram and YouTube channel on the image.')
 parser.add_argument('--ext', type=str, nargs='*', default=['JPG', 'PNG'],
         help='Image file extensions to find.')
 
@@ -95,6 +100,12 @@ if __name__ == '__main__':
                     exif_dict['Exif'][piexif.ExifIFD.PixelXDimension] = dest_width
                     exif_dict['Exif'][piexif.ExifIFD.PixelYDimension] = dest_height
                     exif_bytes = piexif.dump(exif_dict)
+
+                    if args.watermark:
+                        img, _, inverse_transpose = exif_transpose_delete_exif(img)
+                        img = watermark_signature(img).convert('RGB')
+                        if inverse_transpose is not None:
+                            img = img.transpose(inverse_transpose)
                     
                     img.save(dest_file, quality=args.quality, exif=exif_bytes)
 

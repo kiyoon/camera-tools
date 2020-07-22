@@ -38,6 +38,10 @@ def copy_file(source_dir, destination_dir, name):
     source_file = os.path.join(source_dir, name)
     dest_file = os.path.join(destination_dir, name)
 
+    if not os.path.isfile(source_file):
+        logger.error("File doesn't exist: %s", source_file)
+        return False
+
     if os.path.isfile(dest_file):
         logger.error("File already exists: %s", dest_file)
         return False
@@ -81,7 +85,7 @@ if __name__ == '__main__':
             nb_error += not copy_file(args.source_dir, args.destination_dir, cr3_name)
 
         if args.copy_arw:
-            # CR3
+            # ARW 
             arw_name = os.path.splitext(image_name)[0] + '.ARW'
             nb_error += not copy_file(args.source_dir, args.destination_dir, arw_name)
 
