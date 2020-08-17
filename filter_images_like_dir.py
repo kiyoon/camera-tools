@@ -54,10 +54,10 @@ if __name__ == '__main__':
     
     if args.delete_originals:
         copy_func = move
-        copy_msg = "Copying"
+        copy_msg = "Moving"
     else:
         copy_func = copy2
-        copy_msg = "Moving"
+        copy_msg = "Copying"
     
     for root, dirs, files in os.walk(args.dir_like):
         dest_root = root.replace(args.dir_like, args.destination_dir, 1)
