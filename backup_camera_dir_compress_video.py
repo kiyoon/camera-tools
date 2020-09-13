@@ -7,6 +7,7 @@ from shutil import copy2
 import filecmp
 import coloredlogs, logging, verboselogs
 import exiftool
+from fractions import Fraction
 
 EXIF_CAMERA_MODEL = 'EXIF:Model'
 #EXIF_VIDEO_WIDTH = "EXIF:RelatedImageWidth"
@@ -59,6 +60,8 @@ parser.add_argument('-u', '--uhd_bitrate', type=int, default=32000,
         help='Kilo-bitrate for 4K videos. Double this if the frame rate is higher than 40')
 parser.add_argument('--detect', type=str, default='camera', choices=['camera', 'OBS'],
         help='Whether to detect camera videos or OBS videos')
+parser.add_argument('--action_detect_failed', type=str, default='copy', choices=['copy', 'encode'],
+        help='When video detection is failed (due to Korean file name), copy the file or encode the file?')
 parser.add_argument('--skip_ext', type=str, nargs='*', default=['CR3', 'ARW'],
         help='File extensions to skip')
 
@@ -81,8 +84,12 @@ def check_file_OBS_video(source_file, ext):
     Detects OBS video with the first audio trackname as "All (recording)" and the colour space is bt709 (full range).
     """
     if ext == "mp4":
-        with exiftool.ExifTool() as et:
-            metadata = et.get_metadata(source_file)
+        try:
+            with exiftool.ExifTool() as et:
+                metadata = et.get_metadata(source_file)
+        except json.decoder.JSONDecodeError:
+            ffprobe_out = ffprobe(source_file)
+            return 'failed', None, ffprobe_out      # failed to read the metadata. Possibly Korean filename?
 
         if EXIF_OBS_GRAPHICS_MODE in metadata.keys():
             graphics_mode = metadata[EXIF_OBS_GRAPHICS_MODE]
@@ -93,10 +100,13 @@ def check_file_OBS_video(source_file, ext):
                     if track2_name == OBS_AUDIOTRACK_NAME:  # Assuming that the first audio track is names as this for all OBS videos.
                         ffprobe_out = ffprobe(source_file)
                         if ffprobe_out['streams'][0]['color_space'] == 'bt709':
-                            return True, metadata, ffprobe_out
+                            return 'OBS', metadata, ffprobe_out
     elif ext == "mkv":
-        with exiftool.ExifTool() as et:
-            metadata = et.get_metadata(source_file)
+        try:
+            with exiftool.ExifTool() as et:
+                metadata = et.get_metadata(source_file)
+        except json.decoder.JSONDecodeError:
+            metadata = None         # failed to read the metadata. Possibly Korean filename?
 
         ffprobe_out = ffprobe(source_file)
         if ffprobe_out['streams'][1]['tags']['title'] == OBS_AUDIOTRACK_NAME:
@@ -181,7 +191,7 @@ if __name__ == '__main__':
                 if filecmp.cmp(source_file,dest_file,shallow=True):     # doesn't compare file content
                     logger.info("Skipping file (already exists): %s", dest_file)
                 else:
-                    if check_file_camera_or_obs_video(source_file, ext)[0] != 'unknown':
+                    if check_file_camera_or_obs_video(source_file, ext)[0] in ['unknown', 'failed']:
                         logger.info("Skipping compressed video (warning: might not be encoded properly but not verifying): %s", dest_file)
                     else:
                         logger.error("File already exists but not identical: %s", dest_file)
@@ -195,15 +205,31 @@ if __name__ == '__main__':
                         raise DontCopyFile()
 
                     camera_brand, metadata, ffprobe_out = check_file_camera_or_obs_video(source_file, ext)
-                    if camera_brand != 'unknown':
-                        if ext == "mp4":
-                            video_height = int(metadata[EXIF_VIDEO_HEIGHT])
-                            video_fps = float(metadata[EXIF_VIDEO_FPS])
-                        elif ext == "mkv":
-                            video_height = int(metadata[EXIF_MKV_VIDEO_HEIGHT])
-                            video_fps = float(metadata[EXIF_MKV_VIDEO_FPS])
+
+                    if camera_brand == 'failed':
+                        logger.warning("Cannot identify metadata from video: %s. Korean file names may not be supported.", source_file)
+                        nb_warning += 1
+
+                    camera_file_detected = camera_brand not in ['unknown', 'failed']
+                    failed_but_encode = camera_brand == 'failed' and args.action_detect_failed == 'encode'
+
+                    if camera_file_detected or failed_but_encode:
+                        if metadata is not None:
+                            if ext == "mp4":
+                                video_height = int(metadata[EXIF_VIDEO_HEIGHT])
+                                video_fps = float(metadata[EXIF_VIDEO_FPS])
+                            elif ext == "mkv":
+                                video_height = int(metadata[EXIF_MKV_VIDEO_HEIGHT])
+                                video_fps = float(metadata[EXIF_MKV_VIDEO_FPS])
+                            else:
+                                raise Exception("Not supported file type")
+                        elif ffprobe_out is not None:
+                            # read video height and fps using ffprobe
+                            video_height = int(ffprobe_out['streams'][0]['height'])
+                            video_fps = float(Fraction(ffprobe_out['streams'][0]['r_frame_rate']))
                         else:
-                            raise Exception("Not supported file type")
+                            raise Exception("Can't read metadata")
+
 
                         #logger.warning("%d %d %f", video_width, video_height, video_fps)
                         if video_height == 720:
@@ -235,7 +261,7 @@ if __name__ == '__main__':
                         # libfdk_aac codec has a higher quality (but defaults to a low-pass filter of 14kHz), so consider using it in case you have it enabled.
                         ffmpeg_cmd_audio_aac = ["-c:a", "aac", "-b:a", "256k", "-ar", "48000"]
                         ffmpeg_cmd_output = [dest_file]
-                        if camera_brand == 'M50':
+                        if camera_brand in ['M50', 'OBS', 'failed']:
                             # h264 nvidia decode, encode
                             # copy audio
                             ffmpeg_cmd = ffmpeg_cmd_head + ffmpeg_cmd_nvdecode + ffmpeg_cmd_video + ffmpeg_cmd_audio_copy + ffmpeg_cmd_output
@@ -243,6 +269,8 @@ if __name__ == '__main__':
                             # h264 nvidia decode, encode
                             # audio aac 256k
                             ffmpeg_cmd = ffmpeg_cmd_head + ffmpeg_cmd_nvdecode + ffmpeg_cmd_video + ffmpeg_cmd_audio_aac + ffmpeg_cmd_output
+                        else:
+                            raise Exception("Not recognised camera brand: %s" % camera_brand)
 
 
                         subprocess.run(ffmpeg_cmd,
@@ -252,6 +280,8 @@ if __name__ == '__main__':
 
                         raise DontCopyFile()
 
+
+                    # else:
                     logger.info("Copying file to: %s", dest_file)
                     raise CopyFile()
                         
@@ -266,16 +296,6 @@ if __name__ == '__main__':
                     nb_error += 1
                     logger.info("Removing %s", dest_file)
                     os.remove(dest_file)
-
-                except json.decoder.JSONDecodeError:
-                    logger.warning("Cannot identify metadata from video: %s.", source_file)
-                    if os.path.isfile(dest_file):
-                        logger.warning("Destination file already exists. Skipping")
-                    else:
-                        logger.warning("Copying file to: %s", dest_file)
-                        copy2(source_file, dest_file)
-                    nb_warning += 1
-
 
 
 
