@@ -191,7 +191,7 @@ if __name__ == '__main__':
                 if filecmp.cmp(source_file,dest_file,shallow=True):     # doesn't compare file content
                     logger.info("Skipping file (already exists): %s", dest_file)
                 else:
-                    if check_file_camera_or_obs_video(source_file, ext)[0] in ['unknown', 'failed']:
+                    if check_file_camera_or_obs_video(source_file, ext)[0] not in ['unknown', 'failed']:
                         logger.info("Skipping compressed video (warning: might not be encoded properly but not verifying): %s", dest_file)
                     else:
                         logger.error("File already exists but not identical: %s", dest_file)
