@@ -64,6 +64,8 @@ parser.add_argument('--action_detect_failed', type=str, default='copy', choices=
         help='When video detection is failed (due to Korean file name), copy the file or encode the file?')
 parser.add_argument('--skip_ext', type=str, nargs='*', default=['CR3', 'ARW'],
         help='File extensions to skip')
+parser.add_argument('--verify_encoded_videos', action='store_true',
+        help='Verify if the encoding has not failed, by seeing if duration almost matches (up to a second)')
 
 args = parser.parse_args()
 
@@ -191,8 +193,19 @@ if __name__ == '__main__':
                 if filecmp.cmp(source_file,dest_file,shallow=True):     # doesn't compare file content
                     logger.info("Skipping file (already exists): %s", dest_file)
                 else:
-                    if check_file_camera_or_obs_video(source_file, ext)[0] not in ['unknown', 'failed']:
-                        logger.info("Skipping compressed video (warning: might not be encoded properly but not verifying): %s", dest_file)
+                    camera_brand, _, ffprobe_source = check_file_camera_or_obs_video(source_file, ext)
+                    if camera_brand not in ['unknown', 'failed']:
+                        if args.verify_encoded_videos:
+                            if ffprobe_source is None:
+                                ffprobe_source = ffprobe(source_file)
+                            ffprobe_dest = ffprobe(dest_file)
+                            if abs(float(ffprobe_source['streams'][0]['duration']) - float(ffprobe_dest['streams'][0]['duration'])) > 1.0:
+                                logger.error("Video not encoded properly! Skipping: %s", dest_file)
+                                nb_error += 1
+                            else:
+                                logger.info("Skipping compressed video: %s", dest_file)
+                        else:
+                            logger.info("Skipping compressed video (warning: might not be encoded properly but not verifying): %s", dest_file)
                     else:
                         logger.error("File already exists but not identical: %s", dest_file)
                         nb_error += 1
