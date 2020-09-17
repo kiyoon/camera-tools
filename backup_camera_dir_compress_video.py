@@ -120,8 +120,12 @@ def check_file_OBS_video(source_file, ext):
 
 def check_file_M50_video(source_file, ext):
     if ext == "mp4":
-        with exiftool.ExifTool() as et:
-            metadata = et.get_metadata(source_file)
+        try:
+            with exiftool.ExifTool() as et:
+                metadata = et.get_metadata(source_file)
+        except json.decoder.JSONDecodeError:
+            ffprobe_out = ffprobe(source_file)
+            return 'failed', None, ffprobe_out      # failed to read the metadata. Possibly Korean filename?
 
         if EXIF_CAMERA_MODEL in metadata.keys():
             camera_model = metadata[EXIF_CAMERA_MODEL]
@@ -132,8 +136,12 @@ def check_file_M50_video(source_file, ext):
 
 def check_file_a6000_video(source_file, ext):
     if ext == "mp4":
-        with exiftool.ExifTool() as et:
-            metadata = et.get_metadata(source_file)
+        try:
+            with exiftool.ExifTool() as et:
+                metadata = et.get_metadata(source_file)
+        except json.decoder.JSONDecodeError:
+            ffprobe_out = ffprobe(source_file)
+            return 'failed', None, ffprobe_out      # failed to read the metadata. Possibly Korean filename?
 
         EXIF_MANUFACTURER = 'XML:DeviceManufacturer'
         if EXIF_MANUFACTURER in metadata.keys():
@@ -145,11 +153,11 @@ def check_file_a6000_video(source_file, ext):
 
 
 def check_file_camera_video(source_file, ext):
-    brand, metadata, _ = check_file_M50_video(source_file, ext)
+    brand, metadata, ffprobe_out = check_file_M50_video(source_file, ext)
     if brand == 'unknown':
-        brand, metadata, _ = check_file_a6000_video(source_file, ext)
+        brand, metadata, ffprobe_out = check_file_a6000_video(source_file, ext)
 
-    return brand, metadata, None
+    return brand, metadata, ffprobe_out
 
 
 if __name__ == '__main__':
