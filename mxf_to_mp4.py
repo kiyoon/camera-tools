@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 COLOUR_RANGE_FULL = ["-color_range", "pc", "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709", "-pix_fmt", "yuvj420p"]
+COLOUR_RANGE_LIMITED = ["-color_range", "tv", "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709", "-pix_fmt", "yuvj420p"]
 
 
 import argparse
@@ -10,6 +11,7 @@ class Formatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionH
 
 parser = argparse.ArgumentParser(
         description='''Convert MXF high resolution files to MP4 using FFMPEG.
+Always assume that the files are in limited colour range.
 
 Author: Kiyoon Kim (yoonkr33@gmail.com)''',
         formatter_class=Formatter)
@@ -63,13 +65,16 @@ if __name__ == "__main__":
                 # ffmpeg
                 logger.info("Encoding video to %s", dest_file)
 
+                colour_range = COLOUR_RANGE_LIMITED
+
+
                 ffmpeg_cmd_head = ["ffmpeg", "-hide_banner", "-loglevel", "info"]
 
                 ffmpeg_youtube_recommended = ["-coder", "1", "-movflags", "+faststart", "-g", "12", "-bf", "2"]
                 if args.cpu:
-                    ffmpeg_cmd_video = ["-i", source_file, "-c:v", "libx264", "-preset", "slow", "-profile:v", "high", "-crf", "%d" % args.crf] + ffmpeg_youtube_recommended + COLOUR_RANGE_FULL
+                    ffmpeg_cmd_video = ["-i", source_file, "-c:v", "libx264", "-preset", "slow", "-profile:v", "high", "-crf", "%d" % args.crf] + ffmpeg_youtube_recommended + colour_range
                 else:
-                    ffmpeg_cmd_video = ["-i", source_file, "-c:v", "h264_nvenc", "-rc:v", "vbr_hq", "-cq:v", "10", "-b:v", "%dk" % args.video_bitrate, "-maxrate:v", "%dk" % (args.video_bitrate * 2), "-profile:v", "high"] + ffmpeg_youtube_recommended + COLOUR_RANGE_FULL
+                    ffmpeg_cmd_video = ["-i", source_file, "-c:v", "h264_nvenc", "-rc:v", "vbr_hq", "-cq:v", "10", "-b:v", "%dk" % args.video_bitrate, "-maxrate:v", "%dk" % (args.video_bitrate * 2), "-profile:v", "high"] + ffmpeg_youtube_recommended + colour_range
 
                 # -map 0 to copy all audio streams (and possibly metadata?)
                 # libfdk_aac codec has a higher quality (but defaults to a low-pass filter of 14kHz), so consider using it in case you have it enabled.

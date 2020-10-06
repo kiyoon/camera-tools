@@ -151,11 +151,19 @@ def check_file_a6000_video(source_file, ext):
                 return 'a6000', metadata, None
     return 'unknown', None, None
 
+def check_file_handycam_video(source_file, ext):
+    if ext == "mts":
+        ffprobe_out = ffprobe(source_file)
+        return 'handycam', None, ffprobe_out      # failed to read the metadata. Possibly Korean filename?
+
+    return 'unknown', None, None
 
 def check_file_camera_video(source_file, ext):
     brand, metadata, ffprobe_out = check_file_M50_video(source_file, ext)
     if brand == 'unknown':
         brand, metadata, ffprobe_out = check_file_a6000_video(source_file, ext)
+        if brand == 'unknown':
+            brand, metadata, ffprobe_out = check_file_handycam_video(source_file, ext)
 
     return brand, metadata, ffprobe_out
 
@@ -196,6 +204,12 @@ if __name__ == '__main__':
                 if ext == 'mkv':
                     if check_file_camera_or_obs_video(source_file, ext)[0] == 'OBS':
                         dest_file = dest_file[:-3] + 'mp4'
+            # Convert MTS to MP4
+            elif args.detect == 'camera':
+                if ext == 'mts':
+                    if check_file_camera_or_obs_video(source_file, ext)[0] == 'handycam':
+                        dest_file = dest_file[:-3] + 'mp4'
+
 
             if os.path.isfile(dest_file):
                 if filecmp.cmp(source_file,dest_file,shallow=True):     # doesn't compare file content
@@ -276,7 +290,9 @@ if __name__ == '__main__':
                         ffmpeg_cmd_nvdecode = ["-hwaccel", "cuvid", "-c:v", "h264_cuvid"]
                         ffmpeg_cmd_video = ["-i", source_file, "-c:v", "h264_nvenc", "-rc:v", "vbr_hq", "-cq:v", "10", "-b:v", "%dk" % bitrate, "-maxrate:v", "%dk" % (bitrate * 2), "-profile:v", "high"] + COLOUR_RANGE_FULL
 
-                        # -map 0 to copy all audio streams (and possibly metadata?)
+                        # -map 0 to copy all streams (including metadata?)
+                        # -map 0:a to copy all audio streams
+                        ffmpeg_cmd_audio_copy = ["-c:a", "copy", "-map", "0"]
                         ffmpeg_cmd_audio_copy = ["-c:a", "copy", "-map", "0"]
                         # (a6000 has time metadata, but dropping it because -movflags use_metadata_tags and -map_metadata 0 didn't work)
                         # libfdk_aac codec has a higher quality (but defaults to a low-pass filter of 14kHz), so consider using it in case you have it enabled.
@@ -285,17 +301,25 @@ if __name__ == '__main__':
                         if camera_brand in ['M50', 'OBS', 'failed']:
                             # h264 nvidia decode, encode
                             # copy audio
-                            ffmpeg_cmd = ffmpeg_cmd_head + ffmpeg_cmd_nvdecode + ffmpeg_cmd_video + ffmpeg_cmd_audio_copy + ffmpeg_cmd_output
+                            ffmpeg_cmds = [ffmpeg_cmd_head + ffmpeg_cmd_nvdecode + ffmpeg_cmd_video + ffmpeg_cmd_audio_copy + ffmpeg_cmd_output]
+                        elif camera_brand == 'handycam':
+                            # h264 nvidia decode, encode
+                            # copy audio
+                            # extract subtitles into .sup file
+                            ffmpeg_cmds = [ffmpeg_cmd_head + ["-i", source_file, "-c:s", "copy", os.path.splitext(dest_file)[0] + ".sup"]]
+                            # select all videos and audios but not subtitles
+                            ffmpeg_cmds.append(ffmpeg_cmd_head + ffmpeg_cmd_nvdecode + ffmpeg_cmd_video + ["-c:a", "copy", "-map", "0:v", "-map", "0:a"] + ffmpeg_cmd_output)
                         elif camera_brand == 'a6000':
                             # h264 nvidia decode, encode
                             # audio aac 256k
-                            ffmpeg_cmd = ffmpeg_cmd_head + ffmpeg_cmd_nvdecode + ffmpeg_cmd_video + ffmpeg_cmd_audio_aac + ffmpeg_cmd_output
+                            ffmpeg_cmds = [ffmpeg_cmd_head + ffmpeg_cmd_nvdecode + ffmpeg_cmd_video + ffmpeg_cmd_audio_aac + ffmpeg_cmd_output]
+
                         else:
                             raise Exception("Not recognised camera brand: %s" % camera_brand)
 
-
-                        subprocess.run(ffmpeg_cmd,
-                                check=True)
+                        for ffmpeg_cmd in ffmpeg_cmds:
+                            subprocess.run(ffmpeg_cmd,
+                                    check=True)
                         # CPU
                         #subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "info", "-i", source_file, "-c:v", "libx264", "-rc:v", "vbr_hq", "-cq:v", "10", "-b:v", "%dk" % bitrate, "-maxrate:v", "%dk" % (bitrate * 2), "-profile:v", "high"] + colour_range + ["-c:a", "copy", "-map", "0", dest_file])
 
