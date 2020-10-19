@@ -23,12 +23,17 @@ parser.add_argument('--crf', type=int, default=17,
         help='crf (quality) for CPU encoding.')
 parser.add_argument('-v', '--video_bitrate', type=int, default=15000,
         help='Kilo-bitrate for GPU encoding.')
+parser.add_argument('-r', '--rescale_height', type=int, default=None,
+        help='Height value for rescaling. (Only cpu support)')
 parser.add_argument('-a', '--audio_bitrate', type=int, default=384,
         help='Kilo-bitrate for audio')
 parser.add_argument('-s', '--audio_samplerate', type=int, default=48000,
         help='Sampling rate for audio')
 
 args = parser.parse_args()
+
+if not args.cpu and args.rescale_height is not None:
+    parser.error("--cpu and --rescale_height can't come together.")
 
 import coloredlogs, logging, verboselogs
 
@@ -73,6 +78,8 @@ if __name__ == "__main__":
                 ffmpeg_youtube_recommended = ["-coder", "1", "-movflags", "+faststart", "-g", "12", "-bf", "2"]
                 if args.cpu:
                     ffmpeg_cmd_video = ["-i", source_file, "-c:v", "libx264", "-preset", "slow", "-profile:v", "high", "-crf", "%d" % args.crf] + ffmpeg_youtube_recommended + colour_range
+                    if args.rescale_height is not None:
+                        ffmpeg_cmd_video += ["-vf", "scale=-2:%d" % args.rescale_height]
                 else:
                     ffmpeg_cmd_video = ["-i", source_file, "-c:v", "h264_nvenc", "-rc:v", "vbr_hq", "-cq:v", "10", "-b:v", "%dk" % args.video_bitrate, "-maxrate:v", "%dk" % (args.video_bitrate * 2), "-profile:v", "high"] + ffmpeg_youtube_recommended + colour_range
 
