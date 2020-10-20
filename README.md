@@ -58,3 +58,10 @@ ffmpeg with NVIDIA hardware acceleration enabled.
 ## Usage
 
 `bulk_image_resize.py /home/user/Picture/Canon /home/user/Picture/Canon_resized`
+
+
+# SRT framerate conversion
+
+## Requirements
+
+`pip3 install srt coloredlogs verboselogs`
