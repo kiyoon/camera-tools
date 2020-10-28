@@ -73,28 +73,45 @@ if __name__ == '__main__':
                 source_file = os.path.join(args.source_dir, name)
                 dest_file = os.path.join(dest_root, name)
                 logger.info("%s file to: %s", copy_msg, dest_file)
-                copy_func(source_file, dest_file)
+                if os.path.isfile(source_file):
+                    copy_func(source_file, dest_file)
+                else:
+                    logger.error("File doesn't exist: %s", source_file)
+                    nb_error += 1
 
                 if args.copy_json:
                     json_name = name + '.json'
                     source_file = os.path.join(args.source_dir, json_name)
                     dest_file = os.path.join(dest_root, json_name)
                     logger.info("%s file to: %s", copy_msg, dest_file)
-                    copy_func(source_file, dest_file)
+
+                    if os.path.isfile(source_file):
+                        copy_func(source_file, dest_file)
+                    else:
+                        logger.warning("File doesn't exist: %s", source_file)
+                        nb_warning += 1
 
                 if args.copy_cr3:
                     cr3_name = os.path.splitext(name)[0] + '.CR3'
                     source_file = os.path.join(args.source_dir, cr3_name)
                     dest_file = os.path.join(dest_root, cr3_name)
                     logger.info("%s file to: %s", copy_msg, dest_file)
-                    copy_func(source_file, dest_file)
+                    if os.path.isfile(source_file):
+                        copy_func(source_file, dest_file)
+                    else:
+                        logger.warning("File doesn't exist: %s", source_file)
+                        nb_warning += 1
 
                 if args.copy_arw:
                     arw_name = os.path.splitext(name)[0] + '.ARW'
                     source_file = os.path.join(args.source_dir, arw_name)
                     dest_file = os.path.join(dest_root, arw_name)
                     logger.info("%s file to: %s", copy_msg, dest_file)
-                    copy_func(source_file, dest_file)
+                    if os.path.isfile(source_file):
+                        copy_func(source_file, dest_file)
+                    else:
+                        logger.warning("File doesn't exist: %s", source_file)
+                        nb_warning += 1
 
 
     if nb_warning > 0:

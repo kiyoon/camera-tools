@@ -93,21 +93,26 @@ if __name__ == '__main__':
                     dest_width, dest_height = src_width // args.divide, src_height // args.divide 
                     img = img.resize((dest_width,dest_height), resample=resample_str_to_pil_code(args.resample))
 
-                    # Change EXIF resolution info.
-                    exif_dict = piexif.load(img.info['exif'])
-                    #exif_dict['0th'][piexif.ImageIFD.ImageWidth] = args.width
-                    #exif_dict['0th'][piexif.ImageIFD.ImageLength] = args.height
-                    exif_dict['Exif'][piexif.ExifIFD.PixelXDimension] = dest_width
-                    exif_dict['Exif'][piexif.ExifIFD.PixelYDimension] = dest_height
-                    exif_bytes = piexif.dump(exif_dict)
+                    if 'exif' in img.info.keys():
+                        # Change EXIF resolution info.
+                        exif_dict = piexif.load(img.info['exif'])
+                        #exif_dict['0th'][piexif.ImageIFD.ImageWidth] = args.width
+                        #exif_dict['0th'][piexif.ImageIFD.ImageLength] = args.height
+                        exif_dict['Exif'][piexif.ExifIFD.PixelXDimension] = dest_width
+                        exif_dict['Exif'][piexif.ExifIFD.PixelYDimension] = dest_height
+                        exif_bytes = piexif.dump(exif_dict)
 
-                    if args.watermark:
-                        img, _, inverse_transpose = exif_transpose_delete_exif(img)
-                        img = watermark_signature(img).convert('RGB')
-                        if inverse_transpose is not None:
-                            img = img.transpose(inverse_transpose)
+                        if args.watermark:
+                            img, _, inverse_transpose = exif_transpose_delete_exif(img)
+                            img = watermark_signature(img).convert('RGB')
+                            if inverse_transpose is not None:
+                                img = img.transpose(inverse_transpose)
+                        img.save(dest_file, quality=args.quality, exif=exif_bytes)
+                    else:
+                        if args.watermark:
+                            img = watermark_signature(img).convert('RGB')
+                        img.save(dest_file, quality=args.quality)
                     
-                    img.save(dest_file, quality=args.quality, exif=exif_bytes)
 
     if nb_warning > 0:
         logger.warning("%d warning(s) found.", nb_warning)
