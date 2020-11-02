@@ -9,6 +9,7 @@ import coloredlogs, logging, verboselogs
 
 from PIL import Image
 
+from utils.pil_transpose import exif_transpose_delete_exif
 
 class Formatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):
     pass
@@ -69,6 +70,7 @@ if __name__ == '__main__':
 
             if ext in exts:
                 img = Image.open(source_file)
+                img, _, _ = exif_transpose_delete_exif(img)
                 src_width, src_height = img.size
                 dest_width, dest_height = src_width // args.divide, src_height // args.divide
                 img = img.resize((dest_width,dest_height), resample=resample_str_to_pil_code(args.resample))
