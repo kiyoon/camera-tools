@@ -20,6 +20,8 @@ parser.add_argument('source_dir', type=str,
         help='Directory to resize')
 parser.add_argument('destination_dir', type=str,
         help='Destination directory')
+parser.add_argument('--hevc', action='store_true',
+        help='Decode HEVC file. If False, decode h264.')
 parser.add_argument('--resize', action='store_true',
         help='Resize the video. Set --height.')
 parser.add_argument('--height', type=int, default=720,
@@ -80,7 +82,10 @@ if __name__ == '__main__':
                 if ext in exts:
                     logger.info("Encoding video to: %s", dest_file)
                     ffmpeg_cmd_head = ["ffmpeg", "-hide_banner", "-loglevel", "info"]
-                    ffmpeg_cmd_nvdecode = ["-vsync", "0", "-hwaccel", "cuvid", "-c:v", "h264_cuvid"]
+                    if args.hevc:
+                        ffmpeg_cmd_nvdecode = ["-vsync", "0", "-hwaccel", "cuvid", "-c:v", "hevc_cuvid"]
+                    else:
+                        ffmpeg_cmd_nvdecode = ["-vsync", "0", "-hwaccel", "cuvid", "-c:v", "h264_cuvid"]
                     ffmpeg_youtube_recommended = ["-coder", "1", "-movflags", "+faststart", "-g", "12", "-bf", "2"]
                     if args.cpu:
                         ffmpeg_cmd_video = ["-i", source_file, "-c:v", "libx264", "-preset", "slow", "-profile:v", "high", "-crf", "%d" % args.crf] + ffmpeg_youtube_recommended + COLOUR_RANGE_FULL

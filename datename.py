@@ -52,6 +52,7 @@ import exiftool
 import pprint
 
 import tqdm
+import re
 
 def creation_date(path_to_file):
     """
@@ -116,7 +117,11 @@ if __name__ == "__main__":
             if args.date == 'EXIF':
                 with exiftool.ExifTool() as et:
                     metadata = et.get_metadata(path)
-                photo_date = datetime.strptime(metadata[args.exif_date], args.exif_date_format)
+
+                exif_date = metadata[args.exif_date]
+                exif_date = re.sub('([+-])([0-9]{2}):([0-9]{2})', r'\1\2\3', exif_date)   # Python3.6 can't parse %z with colon (e.g. +09:00) so delete the colon (e.g. +0900)
+
+                photo_date = datetime.strptime(exif_date, args.exif_date_format)
                 #new_fname = metadata[args.exif_date]
                 #new_fname = new_fname.replace(':', '')
                 #new_fname = new_fname.replace(' ', '_')
