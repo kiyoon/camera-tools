@@ -3,7 +3,7 @@
 import os
 import subprocess
 import argparse
-from shutil import copy2
+from shutil import copy2, move
 import filecmp
 import coloredlogs, logging, verboselogs
 import exiftool
@@ -29,12 +29,15 @@ parser.add_argument('--copy_cr3', action='store_true',
         help='Copy the CR3 files together with the images.')
 parser.add_argument('--copy_arw', action='store_true',
         help='Copy the ARW files together with the images.')
+parser.add_argument('--delete_originals', action='store_true',
+        help='Move files instead of copying.')
+
 
 args = parser.parse_args()
 
 
 
-def copy_file(source_dir, destination_dir, name):
+def copy_file(source_dir, destination_dir, name, copy_func=copy2, copy_msg='Copying'):
     source_file = os.path.join(source_dir, name)
     dest_file = os.path.join(destination_dir, name)
 
@@ -47,8 +50,8 @@ def copy_file(source_dir, destination_dir, name):
         return False
 
     else:
-        logger.info("Copying file to: %s", dest_file)
-        copy2(source_file, dest_file)
+        logger.info("%s file to: %s", copy_msg, dest_file)
+        copy_func(source_file, dest_file)
         return True
 
 if __name__ == '__main__':
@@ -71,23 +74,30 @@ if __name__ == '__main__':
     with open(args.image_list, 'r', encoding=args.encoding) as f:
         image_name_list = f.read().splitlines()
 
+    if args.delete_originals:
+        copy_func = move
+        copy_msg = "Moving"
+    else:
+        copy_func = copy2
+        copy_msg = "Copying"
+
     for image_name in image_name_list:
-        nb_error += not copy_file(args.source_dir, args.destination_dir, image_name)
+        nb_error += not copy_file(args.source_dir, args.destination_dir, image_name, copy_func, copy_msg)
 
         if args.copy_json:
             # JSON
             json_name = image_name + '.json'
-            nb_error += not copy_file(args.source_dir, args.destination_dir, json_name)
+            nb_error += not copy_file(args.source_dir, args.destination_dir, json_name, copy_func, copy_msg)
 
         if args.copy_cr3:
             # CR3
             cr3_name = os.path.splitext(image_name)[0] + '.CR3'
-            nb_error += not copy_file(args.source_dir, args.destination_dir, cr3_name)
+            nb_error += not copy_file(args.source_dir, args.destination_dir, cr3_name, copy_func, copy_msg)
 
         if args.copy_arw:
             # ARW 
             arw_name = os.path.splitext(image_name)[0] + '.ARW'
-            nb_error += not copy_file(args.source_dir, args.destination_dir, arw_name)
+            nb_error += not copy_file(args.source_dir, args.destination_dir, arw_name, copy_func, copy_msg)
 
     if nb_warning > 0:
         logger.warning("%d warning(s) found.", nb_warning)
