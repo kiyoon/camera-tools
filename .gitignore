@@ -1,4 +1,5 @@
 instagram_tools/config/
+instagram_tools/key.ini
 
 # VIM
 *.py~

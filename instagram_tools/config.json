@@ -1,0 +1,12 @@
+{
+	"hashtag_groups": {
+		"landscape": "#landscape #scenary #풍경 #배경",
+		"portrait": "#portrait #people #person #인물 #사람",
+		"animal": "#animal #animals #pet #wildanimal #동물 #반려견 #반려동물 #야생동물",
+		"seoul design festival": "#seouldesignfestival #coex #design #art #서디페 #서울디자인페스티벌 #작품 #굿즈",
+		"art": "#art #artwork #artpiece #아트 #미술 #예술 #작품 #전시",
+		"nancy lang": "#nancylang #낸시랭"
+	},
+
+	"images_basedir": "."
+}
