@@ -19,8 +19,22 @@ import sqlite3
 import glob
 import os
 
+SCRIPT_DIRPATH = os.path.dirname(os.path.realpath(__file__))
+
+import sys
+sys.path.append('..')
+import exiftool
+
+
+RATIO_NONE = 0
+RATIO_45 = 1
+RATIO_11 = 2
 class ImageViewer():
+
     def __init__(self, root_window):
+        self.camera_info = ''
+        self.camera_hashtags = ''
+
         # Calling the Tk (The intial constructor of tkinter)
         self.root = root_window
 
@@ -51,7 +65,7 @@ class ImageViewer():
         self.txt_description = ScrolledText(self.fr_buttons, width=50, height=5, )
 
 
-        self.config = json.load(open('config.json', 'r'), object_pairs_hook=OrderedDict)
+        self.config = json.load(open(os.path.join(SCRIPT_DIRPATH, 'config.json'), 'r', encoding='utf8'), object_pairs_hook=OrderedDict)
         self.hashtag_groups = self.config['hashtag_groups']
         self.images_basedir = self.config['images_basedir']
         self.hashtag_group_chkbtns = []
@@ -65,24 +79,30 @@ class ImageViewer():
 
         self.label_ratio = tk.Label(self.fr_buttons,text='crop ratio')
         self.radio_ratio_val = tk.IntVar()
-        self.radio_ratio_none = tk.Radiobutton(self.fr_buttons, text="None", value=0, variable=self.radio_ratio_val, command=self._on_ratio)
-        self.radio_ratio_45 = tk.Radiobutton(self.fr_buttons, text="4:5", value=1, variable=self.radio_ratio_val, command=self._on_ratio)
-        self.radio_ratio_11 = tk.Radiobutton(self.fr_buttons, text="1:1", value=2, variable=self.radio_ratio_val, command=self._on_ratio)
-        self.chk_crop_preview_val = tk.IntVar()
-        self.chk_crop_preview= tk.Checkbutton(self.fr_buttons, text='crop preview', variable=self.chk_crop_preview_val, command=self._on_click_crop_preview)
+        self.radio_ratio_none = tk.Radiobutton(self.fr_buttons, text="None", value=RATIO_NONE, variable=self.radio_ratio_val, command=self._on_ratio)
+        self.radio_ratio_45 = tk.Radiobutton(self.fr_buttons, text="4:5", value=RATIO_45, variable=self.radio_ratio_val, command=self._on_ratio)
+        self.radio_ratio_11 = tk.Radiobutton(self.fr_buttons, text="1:1", value=RATIO_11, variable=self.radio_ratio_val, command=self._on_ratio)
         self.label_crop_x = tk.Label(self.fr_buttons,text='x')
         self.label_crop_y = tk.Label(self.fr_buttons,text='y')
         self.label_crop_size = tk.Label(self.fr_buttons,text='size')
         self.spin_crop_x_val = tk.StringVar(value='0.0')
-        self.spin_crop_x = tk.Spinbox(self.fr_buttons,from_=-1.0, to=1.0, format='%.2f', increment=0.1, textvariable=self.spin_crop_x_val, justify=tk.CENTER)
+        self.spin_crop_x = tk.Spinbox(self.fr_buttons,from_=-1.0, to=1.0, format='%.2f', increment=0.02, textvariable=self.spin_crop_x_val, justify=tk.CENTER)
         self.spin_crop_y_val = tk.StringVar(value='0.0')
-        self.spin_crop_y = tk.Spinbox(self.fr_buttons,from_=-1.0, to=1.0, format='%.2f', increment=0.1, textvariable=self.spin_crop_y_val, justify=tk.CENTER)
+        self.spin_crop_y = tk.Spinbox(self.fr_buttons,from_=-1.0, to=1.0, format='%.2f', increment=0.02, textvariable=self.spin_crop_y_val, justify=tk.CENTER)
         self.spin_crop_size_val = tk.StringVar(value='1.0')
-        self.spin_crop_size = tk.Spinbox(self.fr_buttons,from_=0.0, to=2.0, format='%.2f', increment=0.1, textvariable=self.spin_crop_size_val, justify=tk.CENTER)
+        self.spin_crop_size = tk.Spinbox(self.fr_buttons,from_=0.0, to=2.0, format='%.2f', increment=0.02, textvariable=self.spin_crop_size_val, justify=tk.CENTER)
+
+        # trace value changes
+        self.spin_crop_x_val.trace_add('write', self._on_crop_xysize)
+        self.spin_crop_y_val.trace_add('write', self._on_crop_xysize)
+        self.spin_crop_size_val.trace_add('write', self._on_crop_xysize)
+
+        self.chk_crop_preview_val = tk.IntVar()
+        self.chk_crop_preview= tk.Checkbutton(self.fr_buttons, text='crop preview', variable=self.chk_crop_preview_val, command=self._on_click_crop_preview)
+
         self.btn_forward = tk.Button(self.fr_buttons, text="Forward >",
                                 command=self.forward)
-        self.label_description_preview_val = tk.StringVar()
-        self.label_description_preview = tk.Label(self.fr_buttons, textvariable=self.label_description_preview_val, anchor='w', justify=tk.LEFT)
+        self.txt_description_preview = ScrolledText(self.fr_buttons, width=50, height=20, state=tk.DISABLED)
 
         self.fr_btn_widgets = []    # list of all the widgets in the left frame (in order), for grid (partially) and for binding click focus
         self.fr_btn_widgets.append(self.chk_show_uploaded)
@@ -99,6 +119,7 @@ class ImageViewer():
         self.fr_btn_widgets.append(self.radio_ratio_45)
         self.fr_btn_widgets.append(self.radio_ratio_11)
         self.fr_btn_widgets.append(self.btn_forward)
+        self.fr_btn_widgets.append(self.txt_description_preview)
 
 
         # row_widget
@@ -129,7 +150,7 @@ class ImageViewer():
         row_widget += 1
         self.btn_forward.grid(row=row_widget, column=0, columnspan=3, sticky="ew")
         row_widget += 1
-        self.label_description_preview.grid(row=row_widget, column=0, columnspan=3, sticky="w")
+        self.txt_description_preview.grid(row=row_widget, column=0, columnspan=3, sticky="ew")
 
 
         #self.fr_buttons.grid(row=0, column=0, sticky="ns")
@@ -157,13 +178,23 @@ class ImageViewer():
 
     def _read_image_list(self, basedir):
         files = os.listdir(basedir)
-        self.image_basename_list = sorted([f for f in files if os.path.isfile(f) and f.lower().endswith('jpg')])
-        #print(image_basename_list)
+        self.image_basename_list = sorted([f for f in files if os.path.isfile(os.path.join(basedir, f)) and f.lower().endswith('jpg')])
+        #print(self.image_basename_list)
 
     def _update_description_preview(self):
         text = self.txt_description.get('1.0', tk.END).strip()
         # TODO add canon, hashtag groups
-        self.label_description_preview_val.set(text)
+        text += '\n\n'
+        text += self.camera_info + '\n\n' + self.camera_hashtags + '\n\n'
+        for idx, (key, val) in enumerate(self.hashtag_groups.items()):
+            if self.hashtag_group_chkbtn_vals[idx].get() == 1:
+                text += val
+                text += ' '
+                
+        self.txt_description_preview['state'] = tk.NORMAL
+        self.txt_description_preview.delete(1.0,tk.END)
+        self.txt_description_preview.insert(tk.END,text)
+        self.txt_description_preview['state'] = tk.DISABLED
 
 
     def _save_txt_description(self):
@@ -179,7 +210,7 @@ class ImageViewer():
         self.txt_description.edit_modified(False)
 
     def _sqlite_connect(self):
-        self.sqlite_conn = sqlite3.connect('insta_tags.db')
+        self.sqlite_conn = sqlite3.connect(os.path.join(SCRIPT_DIRPATH, 'insta_tags.db'))
         self.sqlite_cursor = self.sqlite_conn.cursor()
 
     def _sqlite_create_table(self):
@@ -230,8 +261,8 @@ class ImageViewer():
         self.back()
 
     def _hashtag_group_chkbtn_press(self, idx):
-        print(idx)
-        print(self.hashtag_group_chkbtn_vals[idx].get())
+        self._update_description_preview()
+        # TODO: save to database
 
     def _focus_next_widget(self, event):
         '''To unbind tab key on the text widget
@@ -273,18 +304,89 @@ class ImageViewer():
         '''
         event.widget.focus()
 
+    def _on_crop_xysize(self, var, indx, mode):
+        self._refresh_canvas()
+
+
     def _on_ratio(self):
-        pass
+        ratio_mode = self.radio_ratio_val.get()
+        if ratio_mode == RATIO_NONE:
+            self.spin_crop_x['state'] = tk.DISABLED
+            self.spin_crop_y['state'] = tk.DISABLED
+            self.spin_crop_size['state'] = tk.DISABLED
+        else:
+            self.spin_crop_x['state'] = tk.NORMAL
+            self.spin_crop_y['state'] = tk.NORMAL
+            self.spin_crop_size['state'] = tk.NORMAL
+
+        self._refresh_canvas()
 
     def _refresh_canvas(self):
         #self.canvas.create_image(0,0,image=self.current_image, anchor=tk.NW)
         
         self.canvas.delete(tk.ALL)
         #self.canvas.create_image(0,0,image=self.current_image, anchor=tk.CENTER)
-        self.canvas.create_image(self.canvas.winfo_width()/2,self.canvas.winfo_height()/2,image=self.current_image, anchor=tk.CENTER)
-        self.canvas.create_rectangle(10*self.img_idx,10,100,100, dash=(3,3), outline="blue", width=2)
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        self.canvas.create_image(canvas_width/2,canvas_height/2,image=self.current_image, anchor=tk.CENTER)
         #self.label.image = ImageTk.PhotoImage(Image.open(image_path))
         #self.label.configure(image=self.label.image)
+
+        # crop
+        ratio_mode = self.radio_ratio_val.get()
+        is_crop_preview = self.chk_crop_preview_val.get()
+
+        if ratio_mode != RATIO_NONE:
+            if ratio_mode == RATIO_45:
+                ratio_x = 4
+                ratio_y = 5
+            elif ratio_mode == RATIO_11:
+                ratio_x = 1
+                ratio_y = 1
+            else:
+                raise NotImplementedError('Unknown ratio mode: {:d}'.format(ratio_mode))
+
+            crop_x_offset = float(self.spin_crop_x_val.get())
+            crop_y_offset = float(self.spin_crop_y_val.get())
+            crop_size = float(self.spin_crop_size_val.get())
+
+            crop_ratio = ratio_x / ratio_y
+            image_width = self.current_image.width()
+            image_height = self.current_image.height()
+            image_ratio = image_width / image_height
+
+            if image_ratio > crop_ratio:
+                # image is wider. crop_size==1 should be matching image's height.
+                # base width and height when crop_size==1
+                crop_base_height = image_height
+                crop_base_width = crop_base_height / ratio_y * ratio_x
+            else:
+                # image is narrower. crop_size==1 should be matching image's width.
+                # base width and height when crop_size==1
+                crop_base_width = image_width
+                crop_base_height = crop_base_width / ratio_x * ratio_y
+
+            crop_centre_x = image_width / 2 + (crop_x_offset * image_width / 2)
+            crop_centre_y = image_height / 2 + (crop_y_offset * image_height / 2)
+            crop_width = crop_base_width * crop_size
+            crop_height = crop_base_height * crop_size
+            crop_x1 = crop_centre_x - (crop_width / 2)
+            crop_y1 = crop_centre_y - (crop_height / 2)
+            crop_x2 = crop_centre_x + (crop_width / 2)
+            crop_y2 = crop_centre_y + (crop_height / 2)
+
+            # adding canvas offset
+            canvas_crop_x1 = round(crop_x1 + (canvas_width - image_width)/2)
+            canvas_crop_y1 = round(crop_y1 + (canvas_height - image_height)/2)
+            canvas_crop_x2 = round(crop_x2 + (canvas_width - image_width)/2)
+            canvas_crop_y2 = round(crop_y2 + (canvas_height - image_height)/2)
+
+            if is_crop_preview == 0:
+                # draw rectangle
+                self.canvas.create_rectangle(canvas_crop_x1,canvas_crop_y1,canvas_crop_x2,canvas_crop_y2, dash=(3,3), outline="blue", width=2)
+            else:
+                # crop and show
+                pass
 
     def _on_change_window_size(self, event):
         # refresh 
@@ -298,11 +400,51 @@ class ImageViewer():
         image_name = self.image_basename_list[self.img_idx]
         image_path = os.path.join(self.images_basedir, image_name)
 
-        self.current_image = ImageTk.PhotoImage(Image.open(image_path))
+        self.current_image_pil = Image.open(image_path)
+        self.current_image = ImageTk.PhotoImage(self.current_image_pil)
 
         self._refresh_canvas()
 
         self.root.title("({:d}/{:d}) {:s}".format(self.img_idx+1, self.image_count(), image_name))
+
+        # read exif
+        self.camera_info = ''
+        self.camera_hashtags = ''
+        try:
+            with exiftool.ExifTool() as et:
+                metadata = et.get_metadata(image_path)
+        except json.decoder.JSONDecodeError:
+            return
+
+        for key, val in self.config['exif'].items():
+            if 'exif_field' in val.keys():
+                if val['exif_field'] in metadata.keys():
+                    metavalue = str(metadata[val['exif_field']])
+
+                    if 'format' in val.keys():
+                        self.camera_info += val['format'].replace("%s", metavalue) + '\n'
+                    if 'hashtag' in val.keys():
+                        self.camera_hashtags += val['hashtag'].replace("%s", metavalue) + ' '
+                    if 'hashtags' in val.keys():
+                        self.camera_hashtags += val['hashtags'][metavalue] + ' '
+
+
+            elif 'exif_fields' in val.keys():
+                metavalues = []
+                for key2 in val['exif_fields']:
+                    if key2 in metadata.keys():
+                        metavalues.append(metadata[key2])
+                    else:
+                        raise ValueError()
+                if 'format' in val.keys():
+                    formatted_str = val['format']
+                    for i, metaval in enumerate(metavalues):
+                        formatted_str = formatted_str.replace("%{:d}".format(i+1), str(metaval))
+                    self.camera_info += formatted_str + '\n'
+            else:
+                raise ValueError()
+
+
 
     def image_count(self):
         return len(self.image_basename_list)
