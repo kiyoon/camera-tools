@@ -18,12 +18,17 @@ from collections import OrderedDict
 import sqlite3
 import glob
 import os
+from datetime import datetime
 
 SCRIPT_DIRPATH = os.path.dirname(os.path.realpath(__file__))
 
 import sys
 sys.path.append('..')
 import exiftool
+
+
+import coloredlogs, logging, verboselogs
+logger = verboselogs.VerboseLogger(__name__)    # add logger.success
 
 
 RATIO_NONE = 0
@@ -152,6 +157,8 @@ class ImageViewer():
         row_widget += 1
         self.txt_description_preview.grid(row=row_widget, column=0, columnspan=3, sticky="ew")
 
+        self._sqlite_connect()
+        self._sqlite_create_table()
 
         #self.fr_buttons.grid(row=0, column=0, sticky="ns")
         #root.grid(row=0, column=1, sticky="nsew")
@@ -169,21 +176,26 @@ class ImageViewer():
 
         self._key_bind()
 
-        self._sqlite_connect()
-        self._sqlite_create_table()
 
 
     def __del__(self):
         self._sqlite_close()
 
-    def _read_image_list(self, basedir):
-        files = os.listdir(basedir)
-        self.image_basename_list = sorted([f for f in files if os.path.isfile(os.path.join(basedir, f)) and f.lower().endswith('jpg')])
+    def _read_image_list(self, basedir: str):
+        self.image_relpath_list = []
+        for root, dirs, files in os.walk(basedir):
+            reldir = root.replace(basedir, '')
+            if reldir.startswith('/') or reldir.startswith('\\'):
+                reldir = reldir[1:]
+            self.image_relpath_list.extend(sorted([os.path.join(reldir,f) for f in files if f.lower().endswith('jpg')]))
+
+        #files = os.listdir(basedir)
+        #self.image_relpath_list = sorted([f for f in files if os.path.isfile(os.path.join(basedir, f)) and f.lower().endswith('jpg')])
         #print(self.image_basename_list)
 
     def _update_description_preview(self):
         text = self.txt_description.get('1.0', tk.END).strip()
-        # TODO add canon, hashtag groups
+
         text += '\n\n'
         text += self.camera_info + '\n\n' + self.camera_hashtags + '\n\n'
         for idx, (key, val) in enumerate(self.hashtag_groups.items()):
@@ -202,9 +214,10 @@ class ImageViewer():
         '''
         self._update_description_preview()
         text = self.txt_description.get('1.0', tk.END).strip()
-        print(text)
         is_modified = self.txt_description.edit_modified()
-        print(is_modified)
+
+        if is_modified:
+            self._sqlite_upsert_description(text)
 
         # reset the flag
         self.txt_description.edit_modified(False)
@@ -215,18 +228,27 @@ class ImageViewer():
 
     def _sqlite_create_table(self):
         self.sqlite_cursor.execute('''CREATE TABLE IF NOT EXISTS insta_tags (
-        id INTEGER PRIMARY KEY,
-        file_basename TEXT,
+        file_relpath TEXT PRIMARY KEY,
         description TEXT,
         hashtag_groups TEXT,
-        width INTEGER,
-        height INTEGER,
-        crop_ratio TEXT,
-        crop_size REAL,
-        crop_x_offset REAL,
-        crop_y_offset REAL,
-        is_insta_uploaded INTEGER,
-        last_updated TEXT )''')
+        crop_ratio TEXT DEFAULT none,
+        crop_size REAL DEFAULT 1.0,
+        crop_x_offset REAL DEFAULT 0.0,
+        crop_y_offset REAL DEFAULT 0.0,
+        is_insta_uploaded INTEGER DEFAULT 0,
+        last_updated_utc REAL )''')
+
+        self.sqlite_conn.commit()
+
+    def _sqlite_upsert_description(self, description_text):
+        last_updated_ts = datetime.utcnow().timestamp()
+        
+        self.sqlite_cursor.execute('''INSERT INTO insta_tags(file_relpath, description, last_updated_utc)
+        VALUES(?,?,?)
+        ON CONFLICT(file_relpath) DO UPDATE SET
+        description=excluded.description,
+        last_updated_utc=excluded.last_updated_utc;''', (self.image_relpath_list[self.img_idx], description_text, last_updated_ts))
+        self.sqlite_conn.commit()
 
     def _sqlite_close(self):
         self.sqlite_conn.close()
@@ -397,15 +419,15 @@ class ImageViewer():
         self._refresh_canvas()
 
     def _change_image(self):
-        image_name = self.image_basename_list[self.img_idx]
-        image_path = os.path.join(self.images_basedir, image_name)
+        image_relpath = self.image_relpath_list[self.img_idx]
+        image_path = os.path.join(self.images_basedir, image_relpath)
 
         self.current_image_pil = Image.open(image_path)
         self.current_image = ImageTk.PhotoImage(self.current_image_pil)
 
         self._refresh_canvas()
 
-        self.root.title("({:d}/{:d}) {:s}".format(self.img_idx+1, self.image_count(), image_name))
+        self.root.title("({:d}/{:d}) {:s}".format(self.img_idx+1, self.image_count(), image_relpath))
 
         # read exif
         self.camera_info = ''
@@ -427,16 +449,24 @@ class ImageViewer():
                         self.camera_hashtags += val['hashtag'].replace("%s", metavalue) + ' '
                     if 'hashtags' in val.keys():
                         self.camera_hashtags += val['hashtags'][metavalue] + ' '
+                    if 'conditional_hashtags' in val.keys():
+                        for condition in val['conditional_hashtags'].keys():
+                            if eval(metavalue + condition):
+                                self.camera_hashtags += val['conditional_hashtags'][condition] + ' '
+
 
 
             elif 'exif_fields' in val.keys():
                 metavalues = []
+                bypass_format = False
                 for key2 in val['exif_fields']:
                     if key2 in metadata.keys():
                         metavalues.append(metadata[key2])
                     else:
-                        raise ValueError()
-                if 'format' in val.keys():
+                        logger.warning('%s not found in EXIF of file %s', key2, image_relpath)
+                        bypass_format = True
+
+                if not bypass_format and 'format' in val.keys():
                     formatted_str = val['format']
                     for i, metaval in enumerate(metavalues):
                         formatted_str = formatted_str.replace("%{:d}".format(i+1), str(metaval))
@@ -445,9 +475,13 @@ class ImageViewer():
                 raise ValueError()
 
 
+        # check db
+        self.sqlite_cursor.execute('SELECT * FROM insta_tags WHERE file_relpath=?', (image_relpath,))
+        db_imageinfo = self.sqlite_cursor.fetchone()
+        print(db_imageinfo)
 
     def image_count(self):
-        return len(self.image_basename_list)
+        return len(self.image_relpath_list)
 
     def forward(self):
         if self.img_idx == self.image_count() -1:
@@ -490,6 +524,11 @@ class ImageViewer():
 
 
 if __name__ == '__main__':
-    root = tk.Tk()
-    ImageViewer(root)
-    root.mainloop()
+    coloredlogs.install(fmt='%(name)s: %(lineno)4d - %(levelname)s - %(message)s', level='INFO')
+    try:
+        # main
+        root = tk.Tk()
+        ImageViewer(root)
+        root.mainloop()
+    except Exception:
+        logger.exception("Exception occurred")
