@@ -9,7 +9,7 @@
 import tkinter as tk
 #from tkinter.scrolledtext import ScrolledText
 from scrolled_text_w_callback import ScrolledText
-from PIL import ImageTk, Image
+from PIL import ImageTk, Image, ImageOps
 
 
 import json
@@ -34,6 +34,18 @@ logger = verboselogs.VerboseLogger(__name__)    # add logger.success
 RATIO_NONE = 0
 RATIO_45 = 1
 RATIO_11 = 2
+
+SQL_FILE_RELPATH = 0
+SQL_DESCRIPTION = 1
+SQL_HASHTAG_GROUPS = 2
+SQL_CROP_RATIO = 3
+SQL_CROP_SIZE = 4
+SQL_CROP_X_OFFSET = 5
+SQL_CROP_Y_OFFSET = 6
+SQL_IS_INSTA_UPLOADED = 7
+SQL_LAST_UPLOADED_UTC = 8
+
+
 class ImageViewer():
 
     def __init__(self, root_window):
@@ -50,6 +62,8 @@ class ImageViewer():
         self.fr_buttons = tk.Frame(self.root, relief=tk.RAISED, bd=2)
         self.fr_buttons.pack(side=tk.LEFT, fill=tk.Y)
 
+        self.sld_scale_var = tk.DoubleVar(value=1.0)
+        self.sld_scale = tk.Scale(self.fr_buttons, from_ = 0.0, to = 4.0, resolution=0.1, orient=tk.HORIZONTAL, variable=self.sld_scale_var, command=self._scale_update)
 
         self.chk_show_uploaded_val = tk.IntVar(value=1)
         self.chk_show_uploaded = tk.Checkbutton(self.fr_buttons, text='show uploaded', variable=self.chk_show_uploaded_val, command=self._on_show_tagged_untagged)
@@ -110,6 +124,7 @@ class ImageViewer():
         self.txt_description_preview = ScrolledText(self.fr_buttons, width=50, height=20, state=tk.DISABLED)
 
         self.fr_btn_widgets = []    # list of all the widgets in the left frame (in order), for grid (partially) and for binding click focus
+        self.fr_btn_widgets.append(self.sld_scale)
         self.fr_btn_widgets.append(self.chk_show_uploaded)
         self.fr_btn_widgets.append(self.chk_show_not_uploaded)
         self.fr_btn_widgets.append(self.chk_show_untagged)
@@ -130,7 +145,8 @@ class ImageViewer():
         # row_widget
         row_widget = 0
 
-        for widget in self.fr_btn_widgets[:8]:
+        for widget in self.fr_btn_widgets[:9]:
+            # until txt_description
             widget.grid(row=row_widget, column=0, columnspan=3, sticky="ew")
             row_widget += 1
         for widget in self.hashtag_group_chkbtns:
@@ -166,7 +182,6 @@ class ImageViewer():
         self._read_image_list(self.images_basedir)
         self.label = tk.Label()
         self.canvas = tk.Canvas(self.root, width=300, height=200)#, bg="white")
-        #self.canvas.grid(row=0, column=1, columnspan=3)
         self.canvas.pack(expand=tk.YES, fill=tk.BOTH)
         self.img_idx = 0
         self._change_image()
@@ -185,13 +200,10 @@ class ImageViewer():
         self.image_relpath_list = []
         for root, dirs, files in os.walk(basedir):
             reldir = root.replace(basedir, '')
-            if reldir.startswith('/') or reldir.startswith('\\'):
+            if reldir.startswith(os.sep):
                 reldir = reldir[1:]
-            self.image_relpath_list.extend(sorted([os.path.join(reldir,f) for f in files if f.lower().endswith('jpg')]))
+            self.image_relpath_list.extend(sorted([os.path.join(reldir,f.replace(os.sep, '/')) for f in files if f.lower().endswith('jpg')]))
 
-        #files = os.listdir(basedir)
-        #self.image_relpath_list = sorted([f for f in files if os.path.isfile(os.path.join(basedir, f)) and f.lower().endswith('jpg')])
-        #print(self.image_basename_list)
 
     def _update_description_preview(self):
         text = self.txt_description.get('1.0', tk.END).strip()
@@ -327,7 +339,10 @@ class ImageViewer():
         event.widget.focus()
 
     def _on_crop_xysize(self, var, indx, mode):
-        self._refresh_canvas()
+        if self.chk_crop_preview_val.get() == 1:
+            self._scale_update()
+        else:
+            self._refresh_canvas()
 
 
     def _on_ratio(self):
@@ -336,29 +351,52 @@ class ImageViewer():
             self.spin_crop_x['state'] = tk.DISABLED
             self.spin_crop_y['state'] = tk.DISABLED
             self.spin_crop_size['state'] = tk.DISABLED
+            self.chk_crop_preview['state'] = tk.DISABLED
         else:
             self.spin_crop_x['state'] = tk.NORMAL
             self.spin_crop_y['state'] = tk.NORMAL
             self.spin_crop_size['state'] = tk.NORMAL
+            self.chk_crop_preview['state'] = tk.NORMAL
 
-        self._refresh_canvas()
+        if self.chk_crop_preview_val.get() == 1:
+            self._scale_update()
+        else:
+            self._refresh_canvas()
 
-    def _refresh_canvas(self):
-        #self.canvas.create_image(0,0,image=self.current_image, anchor=tk.NW)
-        
-        self.canvas.delete(tk.ALL)
-        #self.canvas.create_image(0,0,image=self.current_image, anchor=tk.CENTER)
+    def point_to_canvas(self, x, y):
+        '''Convert image point coordinate to canvas coordinate
+        Considers scaling and canvas offset (image is centre aligned)
+        '''
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
-        self.canvas.create_image(canvas_width/2,canvas_height/2,image=self.current_image, anchor=tk.CENTER)
-        #self.label.image = ImageTk.PhotoImage(Image.open(image_path))
-        #self.label.configure(image=self.label.image)
+        image_width, image_height = self.current_image_pil.size
+        scale = self.sld_scale_var.get()
+        # adding canvas offset
+        canvas_x = x * scale + (canvas_width - image_width * scale)/2
+        canvas_y = y * scale + (canvas_height - image_height * scale)/2
 
-        # crop
+        if self.chk_crop_preview_val.get() == 1:
+            # image centre - crop centre is the another offset
+            crop_xywh = self.get_crop_xywh()
+            crop_centre_x = crop_xywh[0] + crop_xywh[2]/2
+            crop_centre_y = crop_xywh[1] + crop_xywh[3]/2
+            canvas_x += (image_width/2 - crop_centre_x)*scale
+            canvas_y += (image_height/2 - crop_centre_y)*scale
+
+        return round(canvas_x), round(canvas_y)
+
+    def rectangle_to_canvas(self, x, y, w, h):
+        x1, y1, x2, y2 = self.xywh_to_xyxy(x, y, w, h)
+        canvas_x1, canvas_y1 = self.point_to_canvas(x1,y1)
+        canvas_x2, canvas_y2 = self.point_to_canvas(x2,y2)
+        return canvas_x1, canvas_y1, canvas_x2, canvas_y2
+
+    def get_crop_xywh(self):
         ratio_mode = self.radio_ratio_val.get()
-        is_crop_preview = self.chk_crop_preview_val.get()
 
-        if ratio_mode != RATIO_NONE:
+        if ratio_mode == RATIO_NONE:
+            return None
+        else:
             if ratio_mode == RATIO_45:
                 ratio_x = 4
                 ratio_y = 5
@@ -373,8 +411,7 @@ class ImageViewer():
             crop_size = float(self.spin_crop_size_val.get())
 
             crop_ratio = ratio_x / ratio_y
-            image_width = self.current_image.width()
-            image_height = self.current_image.height()
+            image_width, image_height = self.current_image_pil.size
             image_ratio = image_width / image_height
 
             if image_ratio > crop_ratio:
@@ -394,21 +431,84 @@ class ImageViewer():
             crop_height = crop_base_height * crop_size
             crop_x1 = crop_centre_x - (crop_width / 2)
             crop_y1 = crop_centre_y - (crop_height / 2)
-            crop_x2 = crop_centre_x + (crop_width / 2)
-            crop_y2 = crop_centre_y + (crop_height / 2)
+            return crop_x1, crop_y1, crop_width, crop_height
 
-            # adding canvas offset
-            canvas_crop_x1 = round(crop_x1 + (canvas_width - image_width)/2)
-            canvas_crop_y1 = round(crop_y1 + (canvas_height - image_height)/2)
-            canvas_crop_x2 = round(crop_x2 + (canvas_width - image_width)/2)
-            canvas_crop_y2 = round(crop_y2 + (canvas_height - image_height)/2)
+    def xywh_to_xyxy(self, x, y, w, h):
+        return x, y, x+w, y+h
 
+    def _scale_update(self, event=None):
+        '''Manipulate original image
+        1. Apply scaling
+        2. Apply crop preview
+        3. Insert signature to the image
+        '''
+        scale = self.sld_scale_var.get()
+        crop_xywh = self.get_crop_xywh()
+
+        
+        if self.chk_crop_preview_val.get() == 1 and crop_xywh is not None:
+            new_image_size = tuple(map(lambda x: round(x*scale), crop_xywh[2:]))
+            crop_xyxy = tuple(map(round, self.xywh_to_xyxy(*crop_xywh)))
+
+            # perform padding when crop is out of border
+            image_width, image_height = self.current_image_pil.size
+            padding = None
+            if crop_xyxy[0] < 0:
+                if padding is None:
+                    padding = [0,0,0,0]
+                padding[0] = -crop_xyxy[0]
+            if crop_xyxy[1] < 0:
+                if padding is None:
+                    padding = [0,0,0,0]
+                padding[1] = -crop_xyxy[1]
+            if crop_xyxy[2] > image_width:
+                if padding is None:
+                    padding = [0,0,0,0]
+                padding[2] = crop_xyxy[2] - image_width
+            if crop_xyxy[3] > image_height:
+                if padding is None:
+                    padding = [0,0,0,0]
+                padding[3] = crop_xyxy[3] - image_height
+
+            if padding is None:
+                self.current_image_pil_scaled = self.current_image_pil.resize(new_image_size, box=crop_xyxy, resample=Image.BILINEAR)
+            else:
+                logger.warning('white padding applied to the image borders')
+                padding = tuple(padding)
+                crop_xyxy_padded = (crop_xyxy[0] + padding[0], crop_xyxy[1] + padding[1],
+                        crop_xyxy[2] + padding[0], crop_xyxy[3] + padding[1])   # padding on the left and top sides makes the box shift, but not the right and bottom sides.
+                self.current_image_pil_scaled = ImageOps.expand(self.current_image_pil, border=padding, fill=(255,255,255)).resize(new_image_size, box=crop_xyxy_padded, resample=Image.BILINEAR)
+        else:
+            if scale == 1.0:
+                # use the original and do not make a copy
+                self.current_image_pil_scaled = self.current_image_pil
+            else:
+                new_image_size = tuple(map(lambda x: round(x*scale), self.current_image_pil.size))
+                self.current_image_pil_scaled = self.current_image_pil.resize(new_image_size, resample=Image.BILINEAR)
+
+        self.current_image = ImageTk.PhotoImage(self.current_image_pil_scaled)
+        self._refresh_canvas()
+
+    def _refresh_canvas(self):
+        #self.canvas.create_image(0,0,image=self.current_image, anchor=tk.NW)
+        
+        self.canvas.delete(tk.ALL)
+        #self.canvas.create_image(0,0,image=self.current_image, anchor=tk.CENTER)
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        self.canvas.create_image(canvas_width/2,canvas_height/2,image=self.current_image, anchor=tk.CENTER)
+        #self.label.image = ImageTk.PhotoImage(Image.open(image_path))
+        #self.label.configure(image=self.label.image)
+
+        # crop
+        crop_xywh = self.get_crop_xywh()
+        if crop_xywh is not None:
+            canvas_crop_xyxy = self.rectangle_to_canvas(*crop_xywh)
+
+            is_crop_preview = self.chk_crop_preview_val.get()
             if is_crop_preview == 0:
                 # draw rectangle
-                self.canvas.create_rectangle(canvas_crop_x1,canvas_crop_y1,canvas_crop_x2,canvas_crop_y2, dash=(3,3), outline="blue", width=2)
-            else:
-                # crop and show
-                pass
+                self.canvas.create_rectangle(*canvas_crop_xyxy, dash=(3,3), outline="blue", width=2)
 
     def _on_change_window_size(self, event):
         # refresh 
@@ -416,16 +516,17 @@ class ImageViewer():
 
     def _on_click_crop_preview(self):
         # refresh 
-        self._refresh_canvas()
+        self._scale_update()
 
+    @profile
     def _change_image(self):
-        image_relpath = self.image_relpath_list[self.img_idx]
+        image_relpath = self.image_relpath_list[self.img_idx].replace('/', os.sep)
         image_path = os.path.join(self.images_basedir, image_relpath)
 
         self.current_image_pil = Image.open(image_path)
-        self.current_image = ImageTk.PhotoImage(self.current_image_pil)
+        #self.current_image = ImageTk.PhotoImage(self.current_image_pil)    # this is replaced by scaled image
 
-        self._refresh_canvas()
+        self._scale_update()
 
         self.root.title("({:d}/{:d}) {:s}".format(self.img_idx+1, self.image_count(), image_relpath))
 
@@ -478,7 +579,15 @@ class ImageViewer():
         # check db
         self.sqlite_cursor.execute('SELECT * FROM insta_tags WHERE file_relpath=?', (image_relpath,))
         db_imageinfo = self.sqlite_cursor.fetchone()
-        print(db_imageinfo)
+
+        if db_imageinfo is not None:
+            self.txt_description.delete(1.0,tk.END)
+            self.txt_description.insert(tk.END,db_imageinfo[SQL_DESCRIPTION])
+            self.spin_crop_size_val.set(db_imageinfo[SQL_CROP_SIZE])
+            self.spin_crop_x_val.set(db_imageinfo[SQL_CROP_X_OFFSET])
+            self.spin_crop_y_val.set(db_imageinfo[SQL_CROP_Y_OFFSET])
+            # TODO: load more from DB
+
 
     def image_count(self):
         return len(self.image_relpath_list)
