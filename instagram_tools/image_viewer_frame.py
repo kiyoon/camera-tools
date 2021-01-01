@@ -25,6 +25,12 @@ SCRIPT_DIRPATH = os.path.dirname(os.path.realpath(__file__))
 import sys
 sys.path.append('..')
 import exiftool
+from utils.burn_signature import watermark_signature
+from utils.pil_transpose import exif_transpose_delete_exif
+
+from instabot import Bot
+import configparser
+
 
 
 import coloredlogs, logging, verboselogs
@@ -49,7 +55,11 @@ SQL_SEPARATOR = ';'
 
 class ImageViewer():
 
-    def __init__(self, root_window):
+    def __init__(self, root_window, insta_id = None, insta_password = None):
+        if insta_id is not None:
+            self.insta_bot = Bot()
+            self.insta_bot.login(username=insta_id, password=insta_password)
+
         self.camera_info = ''
         self.camera_hashtags = ''
 
@@ -89,6 +99,7 @@ class ImageViewer():
         self.hashtag_groups = self.config['hashtag_groups']
         self.hashtag_groups_indices = {k:i for i,k in enumerate(self.hashtag_groups.keys())}
         self.images_basedir = self.config['images_basedir']
+        self.images_outputdir = self.config['images_outputdir']
         self.hashtag_group_chkbtns = []
         self.hashtag_group_chkbtn_vals = []
 
@@ -197,6 +208,7 @@ class ImageViewer():
 
     def __del__(self):
         self._sqlite_close()
+        self.insta_bot.logout()
 
     def _read_image_list(self, basedir: str):
         self.image_relpath_list = []
@@ -206,8 +218,7 @@ class ImageViewer():
                 reldir = reldir[1:]
             self.image_relpath_list.extend(sorted([os.path.join(reldir,f.replace(os.sep, '/')) for f in files if f.lower().endswith('jpg')]))
 
-
-    def _update_description_preview(self):
+    def get_insta_description(self):
         text = self.txt_description.get('1.0', tk.END).strip()
 
         text += '\n\n'
@@ -216,6 +227,11 @@ class ImageViewer():
             if self.hashtag_group_chkbtn_vals[idx].get() == 1:
                 text += val
                 text += ' '
+
+        return text
+
+    def _update_description_preview(self):
+        text = self.get_insta_description()
                 
         self.txt_description_preview['state'] = tk.NORMAL
         self.txt_description_preview.delete(1.0,tk.END)
@@ -356,7 +372,21 @@ class ImageViewer():
         pass
 
     def _on_click_upload_insta(self):
-        pass
+        # process image
+        # 
+        crop_xywh = self.get_crop_xywh()
+        img = self.get_scaled_cropped_image(1.0, crop_xywh, resample=Image.LANCZOS)
+        img, _, _ = exif_transpose_delete_exif(img)
+        img = watermark_signature(img).convert('RGB')
+
+        output_filepath = os.path.join(self.images_outputdir, self.image_relpath_list[self.img_idx])
+        output_dirpath = os.path.dirname(output_filepath)
+        os.makedirs(output_dirpath, exist_ok=True)
+
+        img.save(output_filepath, quality=95)
+        logger.info('Image saved to %s', output_filepath)
+        self.insta_bot.upload_photo(output_filepath, caption)
+        caption = self.get_insta_description()
 
     def _on_close(self):
         self._save_txt_description()
@@ -500,17 +530,8 @@ class ImageViewer():
     def xywh_to_xyxy(self, x, y, w, h):
         return x, y, x+w, y+h
 
-    def _scale_update(self, event=None):
-        '''Manipulate original image
-        1. Apply scaling
-        2. Apply crop preview
-        3. Insert signature to the image
-        '''
-        scale = self.sld_scale_var.get()
-        crop_xywh = self.get_crop_xywh()
-
-        
-        if self.chk_crop_preview_val.get() == 1 and crop_xywh is not None:
+    def get_scaled_cropped_image(self, scale, crop_xywh, resample=Image.BICUBIC):
+        if crop_xywh is not None:
             new_image_size = tuple(map(lambda x: round(x*scale), crop_xywh[2:]))
             crop_xyxy = tuple(map(round, self.xywh_to_xyxy(*crop_xywh)))
 
@@ -535,13 +556,36 @@ class ImageViewer():
                 padding[3] = crop_xyxy[3] - image_height
 
             if padding is None:
-                self.current_image_pil_scaled = self.current_image_pil.resize(new_image_size, box=crop_xyxy, resample=Image.BILINEAR)
+                current_image_pil_scaled = self.current_image_pil.resize(new_image_size, box=crop_xyxy, resample=resample)
             else:
                 logger.warning('white padding applied to the image borders')
                 padding = tuple(padding)
                 crop_xyxy_padded = (crop_xyxy[0] + padding[0], crop_xyxy[1] + padding[1],
                         crop_xyxy[2] + padding[0], crop_xyxy[3] + padding[1])   # padding on the left and top sides makes the box shift, but not the right and bottom sides.
-                self.current_image_pil_scaled = ImageOps.expand(self.current_image_pil, border=padding, fill=(255,255,255)).resize(new_image_size, box=crop_xyxy_padded, resample=Image.BILINEAR)
+                current_image_pil_scaled = ImageOps.expand(self.current_image_pil, border=padding, fill=(255,255,255)).resize(new_image_size, box=crop_xyxy_padded, resample=resample)
+        else:
+            if scale == 1.0:
+                # use the original and do not make a copy
+                current_image_pil_scaled = self.current_image_pil
+            else:
+                new_image_size = tuple(map(lambda x: round(x*scale), self.current_image_pil.size))
+                current_image_pil_scaled = self.current_image_pil.resize(new_image_size, resample=resample)
+
+        return current_image_pil_scaled
+
+
+    def _scale_update(self, event=None):
+        '''Manipulate original image
+        1. Apply scaling
+        2. Apply crop preview
+        3. Insert signature to the image
+        '''
+        scale = self.sld_scale_var.get()
+        crop_xywh = self.get_crop_xywh()
+
+        
+        if self.chk_crop_preview_val.get() == 1 and crop_xywh is not None:
+            self.current_image_pil_scaled = self.get_scaled_cropped_image(scale, crop_xywh, resample=Image.BILINEAR)
         else:
             if scale == 1.0:
                 # use the original and do not make a copy
@@ -643,16 +687,17 @@ class ImageViewer():
         self.sqlite_cursor.execute('SELECT * FROM insta_tags WHERE file_relpath=?', (image_relpath,))
         db_imageinfo = self.sqlite_cursor.fetchone()
 
-        print(db_imageinfo)
+        logger.info("Loaded info from DB: %s", str(db_imageinfo))
         self.initialise_widgets()
         if db_imageinfo is not None:
             if db_imageinfo[SQL_DESCRIPTION] is not None:
                 self.txt_description.insert(tk.END,db_imageinfo[SQL_DESCRIPTION])
 
 
-            for hashtag_group in db_imageinfo[SQL_HASHTAG_GROUPS].split(SQL_SEPARATOR):
-                idx = self.hashtag_groups_indices[hashtag_group]
-                self.hashtag_group_chkbtn_vals[idx].set(1)
+            if db_imageinfo[SQL_HASHTAG_GROUPS] is not None:
+                for hashtag_group in db_imageinfo[SQL_HASHTAG_GROUPS].split(SQL_SEPARATOR):
+                    idx = self.hashtag_groups_indices[hashtag_group]
+                    self.hashtag_group_chkbtn_vals[idx].set(1)
 
             if db_imageinfo[SQL_CROP_RATIO] == 'none':
                 self.radio_ratio_val.set(RATIO_NONE)
@@ -735,8 +780,13 @@ if __name__ == '__main__':
     coloredlogs.install(fmt='%(name)s: %(lineno)4d - %(levelname)s - %(message)s', level='INFO')
     try:
         # main
+        config = configparser.ConfigParser()
+        config.read('key.ini')
+        insta_id = config['instagram']['id']
+        insta_password = config['instagram']['password']
+
         root = tk.Tk()
-        ImageViewer(root)
+        ImageViewer(root, insta_id, insta_password)
         root.mainloop()
     except Exception:
         logger.exception("Exception occurred")

@@ -20,8 +20,8 @@
 			"exif_field": "EXIF:Model",
 			"format": "%s",
 			"hashtags": {
-				"Canon EOS M50": "#canon #eos #eosM50 #canonm50 #m50 #canoneosm50 #캐논 #캐논M50 #캐논EOSM50 #색감",
-				"Canon EOS R6": "#canon #eos #eosR6 #canonR6 #R6 #canoneosR6 #캐논 #캐논R6 #캐논EOSR6 #색감"
+				"Canon EOS M50": "#canon #eos #eosM50 #canonm50 #m50 #canoneosm50 #color #colorful #colour #colourful #캐논 #캐논M50 #캐논EOSM50 #색감",
+				"Canon EOS R6": "#canon #eos #eosR6 #canonR6 #R6 #canoneosR6 #color #colorful #colour #colourful #캐논 #캐논R6 #캐논EOSR6 #색감"
 			}
 		},
 		"lens": {
@@ -62,5 +62,6 @@
 		
 	},
 
-	"images_basedir": "/home/kiyoon/project/camera-tools/instagram_tools"
+	"images_basedir": "/home/kiyoon/project/camera-tools/instagram_tools",
+	"images_outputdir": "/home/kiyoon/insta_image_output"
 }
