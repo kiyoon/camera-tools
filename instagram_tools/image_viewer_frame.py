@@ -45,6 +45,7 @@ SQL_CROP_Y_OFFSET = 6
 SQL_IS_INSTA_UPLOADED = 7
 SQL_LAST_UPLOADED_UTC = 8
 
+SQL_SEPARATOR = ';'
 
 class ImageViewer():
 
@@ -86,6 +87,7 @@ class ImageViewer():
 
         self.config = json.load(open(os.path.join(SCRIPT_DIRPATH, 'config.json'), 'r', encoding='utf8'), object_pairs_hook=OrderedDict)
         self.hashtag_groups = self.config['hashtag_groups']
+        self.hashtag_groups_indices = {k:i for i,k in enumerate(self.hashtag_groups.keys())}
         self.images_basedir = self.config['images_basedir']
         self.hashtag_group_chkbtns = []
         self.hashtag_group_chkbtn_vals = []
@@ -224,15 +226,61 @@ class ImageViewer():
     def _save_txt_description(self):
         '''Save when modification is detected only
         '''
-        self._update_description_preview()
+        #self._update_description_preview()
         text = self.txt_description.get('1.0', tk.END).strip()
         is_modified = self.txt_description.edit_modified()
 
         if is_modified:
-            self._sqlite_upsert_description(text)
+            #self._sqlite_upsert_description(text)
+            self._sqlite_upsert_one_field('description', text)
 
         # reset the flag
         self.txt_description.edit_modified(False)
+
+    def _save_hashtag_groups(self):
+        group_keys = []
+        for idx, (key, val) in enumerate(self.hashtag_groups.items()):
+            if self.hashtag_group_chkbtn_vals[idx].get() == 1:
+                group_keys.append(key)
+        
+        self._sqlite_upsert_one_field('hashtag_groups', SQL_SEPARATOR.join(group_keys))
+        
+    def _save_crop_ratio(self):
+        ratio_mode = self.radio_ratio_val.get()
+        if ratio_mode == RATIO_NONE:
+            text = 'none'
+        elif ratio_mode == RATIO_45:
+            text = '4:5'
+        elif ratio_mode == RATIO_11:
+            text = '1:1'
+        else:
+            raise ValueError(f'Unknown ratio {ratio_mode}')
+        self._sqlite_upsert_one_field('crop_ratio', text)
+
+    def _save_crop_x(self):
+        x_offset = float(self.spin_crop_x_val.get())
+        self._sqlite_upsert_one_field('crop_x_offset', x_offset)
+
+    def _save_crop_y(self):
+        y_offset = float(self.spin_crop_y_val.get())
+        self._sqlite_upsert_one_field('crop_y_offset', y_offset)
+
+    def _save_crop_size(self):
+        crop_size = float(self.spin_crop_size_val.get())
+        self._sqlite_upsert_one_field('crop_size', crop_size)
+
+    def _sqlite_upsert_one_field(self, column, value):
+        '''Updates the field with the current file path.
+        Updates the last updated timestamp automatically.
+        '''
+        last_updated_ts = datetime.utcnow().timestamp()
+        
+        self.sqlite_cursor.execute(f'''INSERT INTO insta_tags(file_relpath, {column}, last_updated_utc)
+        VALUES(?,?,?)
+        ON CONFLICT(file_relpath) DO UPDATE SET
+        {column}=excluded.{column},
+        last_updated_utc=excluded.last_updated_utc;''', (self.image_relpath_list[self.img_idx], value, last_updated_ts))
+        self.sqlite_conn.commit()
 
     def _sqlite_connect(self):
         self.sqlite_conn = sqlite3.connect(os.path.join(SCRIPT_DIRPATH, 'insta_tags.db'))
@@ -252,16 +300,6 @@ class ImageViewer():
 
         self.sqlite_conn.commit()
 
-    def _sqlite_upsert_description(self, description_text):
-        last_updated_ts = datetime.utcnow().timestamp()
-        
-        self.sqlite_cursor.execute('''INSERT INTO insta_tags(file_relpath, description, last_updated_utc)
-        VALUES(?,?,?)
-        ON CONFLICT(file_relpath) DO UPDATE SET
-        description=excluded.description,
-        last_updated_utc=excluded.last_updated_utc;''', (self.image_relpath_list[self.img_idx], description_text, last_updated_ts))
-        self.sqlite_conn.commit()
-
     def _sqlite_close(self):
         self.sqlite_conn.close()
 
@@ -275,6 +313,10 @@ class ImageViewer():
         self.txt_description.bind('<Tab>', self._focus_next_widget)
         self.txt_description.bind('<FocusOut>', self._on_focus_out)
         self.txt_description.bind('<<TextModified>>', self._on_txt_modified)
+
+        self.spin_crop_size.bind('<FocusOut>', self._on_focus_out)
+        self.spin_crop_x.bind('<FocusOut>', self._on_focus_out)
+        self.spin_crop_y.bind('<FocusOut>', self._on_focus_out)
 
         # move focus when pressing widgets
         self.root.bind('<ButtonPress>', self._on_button_press)
@@ -296,7 +338,7 @@ class ImageViewer():
 
     def _hashtag_group_chkbtn_press(self, idx):
         self._update_description_preview()
-        # TODO: save to database
+        self._save_hashtag_groups()
 
     def _focus_next_widget(self, event):
         '''To unbind tab key on the text widget
@@ -318,14 +360,29 @@ class ImageViewer():
 
     def _on_close(self):
         self._save_txt_description()
+        self._save_crop_size()
+        self._save_crop_x()
+        self._save_crop_y()
         self.root.destroy()
 
     def _on_focus_out(self, event):
         '''Save the description when the text box is out of focus
         '''
         if event.widget == self.txt_description:
-            print('txt focus out')
+            logger.info('Description text focus out: Saving..')
             self._save_txt_description()
+
+        elif event.widget == self.spin_crop_size:
+            logger.info('Crop size focus out: Saving..')
+            self._save_crop_size()
+
+        elif event.widget == self.spin_crop_x:
+            logger.info('Crop x focus out: Saving..')
+            self._save_crop_x()
+
+        elif event.widget == self.spin_crop_y:
+            logger.info('Crop y focus out: Saving..')
+            self._save_crop_y()
 
     def _on_txt_modified(self, event):
         '''Update preview as soon as description is modified
@@ -344,8 +401,7 @@ class ImageViewer():
         else:
             self._refresh_canvas()
 
-
-    def _on_ratio(self):
+    def _ratio_disability_update(self):
         ratio_mode = self.radio_ratio_val.get()
         if ratio_mode == RATIO_NONE:
             self.spin_crop_x['state'] = tk.DISABLED
@@ -358,10 +414,18 @@ class ImageViewer():
             self.spin_crop_size['state'] = tk.NORMAL
             self.chk_crop_preview['state'] = tk.NORMAL
 
+
+
+    def _on_ratio(self):
+        self._ratio_disability_update()
+
         if self.chk_crop_preview_val.get() == 1:
             self._scale_update()
         else:
             self._refresh_canvas()
+
+        logger.info('Ratio changed: Saving..')
+        self._save_crop_ratio()
 
     def point_to_canvas(self, x, y):
         '''Convert image point coordinate to canvas coordinate
@@ -518,7 +582,6 @@ class ImageViewer():
         # refresh 
         self._scale_update()
 
-    @profile
     def _change_image(self):
         image_relpath = self.image_relpath_list[self.img_idx].replace('/', os.sep)
         image_path = os.path.join(self.images_basedir, image_relpath)
@@ -580,14 +643,44 @@ class ImageViewer():
         self.sqlite_cursor.execute('SELECT * FROM insta_tags WHERE file_relpath=?', (image_relpath,))
         db_imageinfo = self.sqlite_cursor.fetchone()
 
+        print(db_imageinfo)
+        self.initialise_widgets()
         if db_imageinfo is not None:
-            self.txt_description.delete(1.0,tk.END)
-            self.txt_description.insert(tk.END,db_imageinfo[SQL_DESCRIPTION])
+            if db_imageinfo[SQL_DESCRIPTION] is not None:
+                self.txt_description.insert(tk.END,db_imageinfo[SQL_DESCRIPTION])
+
+
+            for hashtag_group in db_imageinfo[SQL_HASHTAG_GROUPS].split(SQL_SEPARATOR):
+                idx = self.hashtag_groups_indices[hashtag_group]
+                self.hashtag_group_chkbtn_vals[idx].set(1)
+
+            if db_imageinfo[SQL_CROP_RATIO] == 'none':
+                self.radio_ratio_val.set(RATIO_NONE)
+            elif db_imageinfo[SQL_CROP_RATIO] == '4:5':
+                self.radio_ratio_val.set(RATIO_45)
+            elif db_imageinfo[SQL_CROP_RATIO] == '1:1':
+                self.radio_ratio_val.set(RATIO_11)
+            else:
+                raise ValueError(f'Unknown ratio {db_imageinfo[SQL_CROP_RATIO]}')
+
             self.spin_crop_size_val.set(db_imageinfo[SQL_CROP_SIZE])
             self.spin_crop_x_val.set(db_imageinfo[SQL_CROP_X_OFFSET])
             self.spin_crop_y_val.set(db_imageinfo[SQL_CROP_Y_OFFSET])
+            self._ratio_disability_update()
             # TODO: load more from DB
 
+        self._update_description_preview()
+
+    def initialise_widgets(self):
+        self.txt_description.delete(1.0,tk.END)
+        # initialise hashtag groups (set to False)
+        for hashtag_group_val in self.hashtag_group_chkbtn_vals:
+            hashtag_group_val.set(0)
+        self.radio_ratio_val.set(RATIO_NONE)
+        self.spin_crop_size_val.set(1.0)
+        self.spin_crop_x_val.set(0.0)
+        self.spin_crop_y_val.set(0.0)
+        self._ratio_disability_update()
 
     def image_count(self):
         return len(self.image_relpath_list)
@@ -597,6 +690,9 @@ class ImageViewer():
             return
 
         self._save_txt_description()
+        self._save_crop_size()
+        self._save_crop_x()
+        self._save_crop_y()
 
         self.img_idx += 1
 
@@ -616,6 +712,9 @@ class ImageViewer():
             return
 
         self._save_txt_description()
+        self._save_crop_size()
+        self._save_crop_x()
+        self._save_crop_y()
 
         self.img_idx -= 1
 
