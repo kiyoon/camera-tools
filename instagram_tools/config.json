@@ -1,16 +1,16 @@
 {
 	"hashtag_groups": {
 		"landscape": "#landscape #scenary #풍경 #배경",
-		"portrait": "#portrait #people #person #인물 #사람",
+		"portrait": "#portrait #인물",
 		"night": "#night #nightphotography #lowlight #밤 #야간",
-		"day": "#day #afternoon #밝은날 #화창",
-		"food": "#food #delicious #음식",
-		"seoul": "#seoul #gyeonggi #korea #southkorea #서울 #경기 #한국",
-		"family": "#family #siblings #가족 #동생 #누나 #남동생",
+		"day": "#day #afternoon",
+		"food": "#food #음식",
+		"seoul": "#seoul #korea #southkorea #서울 #경기도 #경기",
+		"family": "#family #siblings #가족",
 		"yacht": "#yacht #boat #sailing #river #party #파티 #요트 #한강 #강 #바다 #보트",
 		"animal": "#animal #animals #pet #wildanimal #동물 #반려견 #반려동물 #야생동물",
 		"seoul design festival": "#seouldesignfestival #coex #design #art #서디페 #서울디자인페스티벌 #작품 #굿즈",
-		"art": "#art #artwork #artpiece #아트 #미술 #예술 #작품 #전시",
+		"art": "#art #artwork #아트 #미술 #예술 #작품 #전시",
 		"nancy lang": "#nancylang #낸시랭",
 		"macro": "#macro #macrophotography #closeup #매크로 #근접 #근접샷"
 	},
@@ -20,15 +20,15 @@
 			"exif_field": "EXIF:Model",
 			"format": "%s",
 			"hashtags": {
-				"Canon EOS M50": "#canon #eos #eosM50 #canonm50 #m50 #canoneosm50 #color #colorful #colour #colourful #캐논 #캐논M50 #캐논EOSM50 #색감",
-				"Canon EOS R6": "#canon #eos #eosR6 #canonR6 #R6 #canoneosR6 #color #colorful #colour #colourful #캐논 #캐논R6 #캐논EOSR6 #색감"
+				"Canon EOS M50": "#canon #canonm50 #m50 #color #colorful #캐논 #색감",
+				"Canon EOS R6": "#canon #eosR6 #canonR6 #R6 #color #colorful #캐논 #색감"
 			}
 		},
 		"lens": {
 			"exif_field": "EXIF:LensModel",
 			"format": "%s",
 			"hashtags": {
-				"RF35mm F1.8 MACRO IS STM": "#rf35mm #rf35mmmacro #rf35mm18"
+				"RF35mm F1.8 MACRO IS STM": "#rf35mm"
 				
 			}
 		},
@@ -62,6 +62,7 @@
 		
 	},
 
-	"images_basedir": "/home/kiyoon/project/camera-tools/instagram_tools",
-	"images_outputdir": "/home/kiyoon/insta_image_output"
+	"images_basedir": "E:\\Photo\\instagram_uploads\\input",
+	"images_proxydir": "E:\\Photo\\instagram_uploads\\proxy",
+	"images_outputdir": "E:\\Photo\\instagram_uploads\\output"
 }

@@ -222,11 +222,13 @@ class ImageViewer():
         text = self.txt_description.get('1.0', tk.END).strip()
 
         text += '\n\n'
-        text += self.camera_info + '\n\n' + self.camera_hashtags + '\n\n'
         for idx, (key, val) in enumerate(self.hashtag_groups.items()):
             if self.hashtag_group_chkbtn_vals[idx].get() == 1:
                 text += val
                 text += ' '
+
+        #text += '\n\n' + self.camera_info + '\n\n'
+        text += self.camera_hashtags
 
         return text
 
@@ -385,8 +387,16 @@ class ImageViewer():
 
         img.save(output_filepath, quality=95)
         logger.info('Image saved to %s', output_filepath)
-        self.insta_bot.upload_photo(output_filepath, caption)
+
         caption = self.get_insta_description()
+        logger.info('Instagram caption: %s', caption)
+
+        #self.insta_bot.upload_photo(output_filepath, caption)
+        self.insta_bot.upload_photo(output_filepath, caption)
+        os.remove(output_filepath + '.REMOVE_ME')
+
+        self._sqlite_upsert_one_field('is_insta_uploaded', 1)
+
 
     def _on_close(self):
         self._save_txt_description()
