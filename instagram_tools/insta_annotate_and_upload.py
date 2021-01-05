@@ -853,7 +853,10 @@ class ImageViewer():
             self._ratio_disability_update()
 
         self._update_description_preview()
-        self.chk_is_uploaded_val.set(db_imageinfo[SQL_IS_INSTA_UPLOADED])
+        if db_imageinfo[SQL_IS_INSTA_UPLOADED] is not None:
+            self.chk_is_uploaded_val.set(db_imageinfo[SQL_IS_INSTA_UPLOADED])
+        else:
+            self.chk_is_uploaded_val.set(0)
 
     def initialise_widgets(self):
         self.txt_description.delete(1.0,tk.END)
