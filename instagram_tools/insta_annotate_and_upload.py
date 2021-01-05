@@ -20,6 +20,10 @@ import glob
 import os
 from datetime import datetime
 
+from instabot import Bot
+import configparser
+import random
+
 SCRIPT_DIRPATH = os.path.dirname(os.path.realpath(__file__))
 
 import sys
@@ -27,9 +31,6 @@ sys.path.append('..')
 import exiftool
 from utils.burn_signature import watermark_signature
 from utils.pil_transpose import exif_transpose_delete_exif
-
-from instabot import Bot
-import configparser
 
 
 
@@ -40,6 +41,7 @@ logger = verboselogs.VerboseLogger(__name__)    # add logger.success
 RATIO_NONE = 0
 RATIO_45 = 1
 RATIO_11 = 2
+RATIO_CUSTOM = 3
 
 SQL_FILE_RELPATH = 0
 SQL_DESCRIPTION = 1
@@ -63,13 +65,17 @@ class ImageViewer():
         self.camera_info = ''
         self.camera_hashtags = ''
 
+        self.current_iamge_pil = None
+        self.current_image_proxy_pil = None
+        self.proxy_file_exists = None
+
         # Calling the Tk (The intial constructor of tkinter)
         self.root = root_window
 
 
         # The geometry of the box which will be displayed
         # on the screen
-        self.root.geometry("700x700")
+        self.root.geometry("1400x1000")
         self.fr_buttons = tk.Frame(self.root, relief=tk.RAISED, bd=2)
         self.fr_buttons.pack(side=tk.LEFT, fill=tk.Y)
 
@@ -82,6 +88,8 @@ class ImageViewer():
         self.chk_show_not_uploaded = tk.Checkbutton(self.fr_buttons, text='show not uploaded', variable=self.chk_show_not_uploaded_val, command=self._on_show_tagged_untagged)
         self.chk_show_untagged_val = tk.IntVar(value=1)
         self.chk_show_untagged = tk.Checkbutton(self.fr_buttons, text='show untagged', variable=self.chk_show_untagged_val, command=self._on_show_tagged_untagged)
+        self.chk_use_proxy_val = tk.IntVar(value=1)
+        self.chk_use_proxy = tk.Checkbutton(self.fr_buttons, text='Use proxy if available', variable=self.chk_use_proxy_val, command=self._on_use_proxy)
         self.btn_last_edited = tk.Button(self.fr_buttons, text="Move to last edited", command=self._on_click_last_edited)
 
         self.btn_upload_insta = tk.Button(self.fr_buttons, text="Upload to Instagram", command=self._on_click_upload_insta)
@@ -99,6 +107,7 @@ class ImageViewer():
         self.hashtag_groups = self.config['hashtag_groups']
         self.hashtag_groups_indices = {k:i for i,k in enumerate(self.hashtag_groups.keys())}
         self.images_basedir = self.config['images_basedir']
+        self.images_proxydir = self.config['images_proxydir']
         self.images_outputdir = self.config['images_outputdir']
         self.hashtag_group_chkbtns = []
         self.hashtag_group_chkbtn_vals = []
@@ -114,6 +123,13 @@ class ImageViewer():
         self.radio_ratio_none = tk.Radiobutton(self.fr_buttons, text="None", value=RATIO_NONE, variable=self.radio_ratio_val, command=self._on_ratio)
         self.radio_ratio_45 = tk.Radiobutton(self.fr_buttons, text="4:5", value=RATIO_45, variable=self.radio_ratio_val, command=self._on_ratio)
         self.radio_ratio_11 = tk.Radiobutton(self.fr_buttons, text="1:1", value=RATIO_11, variable=self.radio_ratio_val, command=self._on_ratio)
+        self.radio_ratio_custom = tk.Radiobutton(self.fr_buttons, text="Custom", value=RATIO_CUSTOM, variable=self.radio_ratio_val, command=self._on_ratio)
+        self.spin_ratio_x_val = tk.StringVar(value="3")
+        self.spin_ratio_x = tk.Spinbox(self.fr_buttons,from_=1, to=30, textvariable=self.spin_ratio_x_val, justify=tk.CENTER)
+        self.spin_ratio_y_val = tk.StringVar(value="2")
+        self.spin_ratio_y = tk.Spinbox(self.fr_buttons,from_=1, to=30, textvariable=self.spin_ratio_y_val, justify=tk.CENTER)
+        self.label_ratio_custom = tk.Label(self.fr_buttons,text=':')
+
         self.label_crop_x = tk.Label(self.fr_buttons,text='x')
         self.label_crop_y = tk.Label(self.fr_buttons,text='y')
         self.label_crop_size = tk.Label(self.fr_buttons,text='size')
@@ -136,11 +152,17 @@ class ImageViewer():
                                 command=self.forward)
         self.txt_description_preview = ScrolledText(self.fr_buttons, width=50, height=20, state=tk.DISABLED)
 
+        self.chk_is_proxy_val = tk.IntVar()
+        self.chk_is_proxy = tk.Checkbutton(self.fr_buttons, text='proxy', variable=self.chk_is_proxy_val, state=tk.DISABLED, anchor=tk.W)
+        self.chk_is_uploaded_val = tk.IntVar()
+        self.chk_is_uploaded = tk.Checkbutton(self.fr_buttons, text='instagram uploaded', variable=self.chk_is_uploaded_val, state=tk.DISABLED, anchor=tk.W)
+
         self.fr_btn_widgets = []    # list of all the widgets in the left frame (in order), for grid (partially) and for binding click focus
         self.fr_btn_widgets.append(self.sld_scale)
         self.fr_btn_widgets.append(self.chk_show_uploaded)
         self.fr_btn_widgets.append(self.chk_show_not_uploaded)
         self.fr_btn_widgets.append(self.chk_show_untagged)
+        self.fr_btn_widgets.append(self.chk_use_proxy)
         self.fr_btn_widgets.append(self.btn_last_edited)
         self.fr_btn_widgets.append(self.btn_upload_insta)
         self.fr_btn_widgets.append(self.btn_exit)
@@ -151,6 +173,13 @@ class ImageViewer():
         self.fr_btn_widgets.append(self.radio_ratio_none)
         self.fr_btn_widgets.append(self.radio_ratio_45)
         self.fr_btn_widgets.append(self.radio_ratio_11)
+        self.fr_btn_widgets.append(self.radio_ratio_custom)
+        self.fr_btn_widgets.append(self.spin_ratio_x)
+        self.fr_btn_widgets.append(self.spin_ratio_y)
+        self.fr_btn_widgets.append(self.spin_crop_size)
+        self.fr_btn_widgets.append(self.spin_crop_x)
+        self.fr_btn_widgets.append(self.spin_crop_y)
+        self.fr_btn_widgets.append(self.chk_crop_preview)
         self.fr_btn_widgets.append(self.btn_forward)
         self.fr_btn_widgets.append(self.txt_description_preview)
 
@@ -158,7 +187,7 @@ class ImageViewer():
         # row_widget
         row_widget = 0
 
-        for widget in self.fr_btn_widgets[:9]:
+        for widget in self.fr_btn_widgets[:10]:
             # until txt_description
             widget.grid(row=row_widget, column=0, columnspan=3, sticky="ew")
             row_widget += 1
@@ -171,6 +200,11 @@ class ImageViewer():
         self.radio_ratio_none.grid(row=row_widget, column=0, sticky="ew")
         self.radio_ratio_45.grid(row=row_widget, column=1, sticky="ew")
         self.radio_ratio_11.grid(row=row_widget, column=2, sticky="ew")
+        row_widget += 1
+        self.radio_ratio_custom.grid(row=row_widget, column=0, sticky="ew")
+        self.spin_ratio_x.grid(row=row_widget, column=1, sticky="ew", padx=40)
+        self.label_ratio_custom.grid(row=row_widget, column=1, sticky="ee")
+        self.spin_ratio_y.grid(row=row_widget, column=2, sticky="ew",padx=40)
         row_widget += 1
         self.label_crop_x.grid(row=row_widget, column=0, sticky="ew")
         self.label_crop_y.grid(row=row_widget, column=1, sticky="ew")
@@ -185,6 +219,10 @@ class ImageViewer():
         self.btn_forward.grid(row=row_widget, column=0, columnspan=3, sticky="ew")
         row_widget += 1
         self.txt_description_preview.grid(row=row_widget, column=0, columnspan=3, sticky="ew")
+        row_widget += 1
+        self.chk_is_proxy.grid(row=row_widget, column=0, columnspan=3, sticky="ew")
+        row_widget += 1
+        self.chk_is_uploaded.grid(row=row_widget, column=0, columnspan=3, sticky="ew")
 
         self._sqlite_connect()
         self._sqlite_create_table()
@@ -220,17 +258,26 @@ class ImageViewer():
 
     def get_insta_description(self):
         text = self.txt_description.get('1.0', tk.END).strip()
+        num_hashtags_desc = text.count('#')
 
-        text += '\n\n'
+        text += '\n\n' + self.camera_info + '\n\n'
+
+        hashtags = ''
         for idx, (key, val) in enumerate(self.hashtag_groups.items()):
             if self.hashtag_group_chkbtn_vals[idx].get() == 1:
-                text += val
-                text += ' '
+                hashtags += val
+                hashtags += ' '
 
-        #text += '\n\n' + self.camera_info + '\n\n'
-        text += self.camera_hashtags
+        hashtags += self.camera_hashtags
+        num_hashtags = hashtags.count('#')
 
-        return text
+        if num_hashtags_desc + num_hashtags > 30:
+            hashtags_list = hashtags.split(' ')
+            random.shuffle(hashtags_list)
+            hashtags_list = hashtags_list[:30-num_hashtags_desc]
+            hashtags = ' '.join(hashtags_list)
+
+        return text + hashtags
 
     def _update_description_preview(self):
         text = self.get_insta_description()
@@ -272,7 +319,7 @@ class ImageViewer():
         elif ratio_mode == RATIO_11:
             text = '1:1'
         else:
-            raise ValueError(f'Unknown ratio {ratio_mode}')
+            text = self.spin_ratio_x_val.get() + ":" + self.spin_ratio_y_val.get()
         self._sqlite_upsert_one_field('crop_ratio', text)
 
     def _save_crop_x(self):
@@ -370,14 +417,24 @@ class ImageViewer():
         else:
             self.btn_last_edited['state'] = tk.NORMAL
 
+    def _on_use_proxy(self):
+        if self.chk_use_proxy_val.get() == 0:
+            self.chk_is_proxy_val.set(0)
+        else:
+            _, is_proxy = self.get_image()
+            self.chk_is_proxy_val.set(is_proxy)
+        self._scale_update()
+
+
     def _on_click_last_edited(self):
         pass
 
     def _on_click_upload_insta(self):
         # process image
         # 
-        crop_xywh = self.get_crop_xywh()
-        img = self.get_scaled_cropped_image(1.0, crop_xywh, resample=Image.LANCZOS)
+        image = self.get_original_image()
+        crop_xywh = self.get_crop_xywh(image)
+        img = self.get_scaled_cropped_image(image, 1.0, crop_xywh, resample=Image.LANCZOS)
         img, _, _ = exif_transpose_delete_exif(img)
         img = watermark_signature(img).convert('RGB')
 
@@ -388,15 +445,16 @@ class ImageViewer():
         img.save(output_filepath, quality=95)
         logger.info('Image saved to %s', output_filepath)
 
-        caption = self.get_insta_description()
+        #caption = self.get_insta_description()
+        caption = self.txt_description.get('1.0', tk.END).strip()
         logger.info('Instagram caption: %s', caption)
 
         #self.insta_bot.upload_photo(output_filepath, caption)
         self.insta_bot.upload_photo(output_filepath, caption)
-        os.remove(output_filepath + '.REMOVE_ME')
+        os.rename(output_filepath + '.REMOVE_ME', output_filepath)
 
-        self._sqlite_upsert_one_field('is_insta_uploaded', 1)
-
+        self._sqlite_upsert_one_field('is_insta_upgoaded', 1)
+        self.chk_is_uploaded_val.set(1)
 
     def _on_close(self):
         self._save_txt_description()
@@ -455,6 +513,13 @@ class ImageViewer():
             self.chk_crop_preview['state'] = tk.NORMAL
 
 
+        if ratio_mode == RATIO_CUSTOM:
+            self.spin_ratio_x['state'] = tk.NORMAL
+            self.spin_ratio_y['state'] = tk.NORMAL
+        else:
+            self.spin_ratio_x['state'] = tk.DISABLED
+            self.spin_ratio_y['state'] = tk.DISABLED
+
 
     def _on_ratio(self):
         self._ratio_disability_update()
@@ -467,13 +532,13 @@ class ImageViewer():
         logger.info('Ratio changed: Saving..')
         self._save_crop_ratio()
 
-    def point_to_canvas(self, x, y):
+    def point_to_canvas(self, image: Image.Image, x, y):
         '''Convert image point coordinate to canvas coordinate
         Considers scaling and canvas offset (image is centre aligned)
         '''
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
-        image_width, image_height = self.current_image_pil.size
+        image_width, image_height = image.size
         scale = self.sld_scale_var.get()
         # adding canvas offset
         canvas_x = x * scale + (canvas_width - image_width * scale)/2
@@ -481,7 +546,7 @@ class ImageViewer():
 
         if self.chk_crop_preview_val.get() == 1:
             # image centre - crop centre is the another offset
-            crop_xywh = self.get_crop_xywh()
+            crop_xywh = self.get_crop_xywh(image)
             crop_centre_x = crop_xywh[0] + crop_xywh[2]/2
             crop_centre_y = crop_xywh[1] + crop_xywh[3]/2
             canvas_x += (image_width/2 - crop_centre_x)*scale
@@ -489,13 +554,13 @@ class ImageViewer():
 
         return round(canvas_x), round(canvas_y)
 
-    def rectangle_to_canvas(self, x, y, w, h):
+    def rectangle_to_canvas(self, image: Image.Image, x, y, w, h):
         x1, y1, x2, y2 = self.xywh_to_xyxy(x, y, w, h)
-        canvas_x1, canvas_y1 = self.point_to_canvas(x1,y1)
-        canvas_x2, canvas_y2 = self.point_to_canvas(x2,y2)
+        canvas_x1, canvas_y1 = self.point_to_canvas(image, x1,y1)
+        canvas_x2, canvas_y2 = self.point_to_canvas(image, x2,y2)
         return canvas_x1, canvas_y1, canvas_x2, canvas_y2
 
-    def get_crop_xywh(self):
+    def get_crop_xywh(self, image: Image.Image):
         ratio_mode = self.radio_ratio_val.get()
 
         if ratio_mode == RATIO_NONE:
@@ -508,14 +573,16 @@ class ImageViewer():
                 ratio_x = 1
                 ratio_y = 1
             else:
-                raise NotImplementedError('Unknown ratio mode: {:d}'.format(ratio_mode))
+                # RATIO_CUSTOM
+                ratio_x = int(self.spin_ratio_x_val.get())
+                ratio_y = int(self.spin_ratio_y_val.get())
 
             crop_x_offset = float(self.spin_crop_x_val.get())
             crop_y_offset = float(self.spin_crop_y_val.get())
             crop_size = float(self.spin_crop_size_val.get())
 
             crop_ratio = ratio_x / ratio_y
-            image_width, image_height = self.current_image_pil.size
+            image_width, image_height = image.size
             image_ratio = image_width / image_height
 
             if image_ratio > crop_ratio:
@@ -540,13 +607,13 @@ class ImageViewer():
     def xywh_to_xyxy(self, x, y, w, h):
         return x, y, x+w, y+h
 
-    def get_scaled_cropped_image(self, scale, crop_xywh, resample=Image.BICUBIC):
+    def get_scaled_cropped_image(self, image: Image.Image, scale, crop_xywh, resample=Image.BICUBIC):
         if crop_xywh is not None:
             new_image_size = tuple(map(lambda x: round(x*scale), crop_xywh[2:]))
             crop_xyxy = tuple(map(round, self.xywh_to_xyxy(*crop_xywh)))
 
             # perform padding when crop is out of border
-            image_width, image_height = self.current_image_pil.size
+            image_width, image_height = image.size
             padding = None
             if crop_xyxy[0] < 0:
                 if padding is None:
@@ -566,20 +633,20 @@ class ImageViewer():
                 padding[3] = crop_xyxy[3] - image_height
 
             if padding is None:
-                current_image_pil_scaled = self.current_image_pil.resize(new_image_size, box=crop_xyxy, resample=resample)
+                current_image_pil_scaled = image.resize(new_image_size, box=crop_xyxy, resample=resample)
             else:
                 logger.warning('white padding applied to the image borders')
                 padding = tuple(padding)
                 crop_xyxy_padded = (crop_xyxy[0] + padding[0], crop_xyxy[1] + padding[1],
                         crop_xyxy[2] + padding[0], crop_xyxy[3] + padding[1])   # padding on the left and top sides makes the box shift, but not the right and bottom sides.
-                current_image_pil_scaled = ImageOps.expand(self.current_image_pil, border=padding, fill=(255,255,255)).resize(new_image_size, box=crop_xyxy_padded, resample=resample)
+                current_image_pil_scaled = ImageOps.expand(image, border=padding, fill=(255,255,255)).resize(new_image_size, box=crop_xyxy_padded, resample=resample)
         else:
             if scale == 1.0:
                 # use the original and do not make a copy
-                current_image_pil_scaled = self.current_image_pil
+                current_image_pil_scaled = image
             else:
-                new_image_size = tuple(map(lambda x: round(x*scale), self.current_image_pil.size))
-                current_image_pil_scaled = self.current_image_pil.resize(new_image_size, resample=resample)
+                new_image_size = tuple(map(lambda x: round(x*scale), image.size))
+                current_image_pil_scaled = image.resize(new_image_size, resample=resample)
 
         return current_image_pil_scaled
 
@@ -588,26 +655,29 @@ class ImageViewer():
         '''Manipulate original image
         1. Apply scaling
         2. Apply crop preview
-        3. Insert signature to the image
+        3. Apply proxy
         '''
         scale = self.sld_scale_var.get()
-        crop_xywh = self.get_crop_xywh()
 
+        image, use_proxy = self.get_image()
+        crop_xywh = self.get_crop_xywh(image)
         
         if self.chk_crop_preview_val.get() == 1 and crop_xywh is not None:
-            self.current_image_pil_scaled = self.get_scaled_cropped_image(scale, crop_xywh, resample=Image.BILINEAR)
+            self.current_image_pil_scaled = self.get_scaled_cropped_image(image, scale, crop_xywh, resample=Image.BILINEAR)
         else:
             if scale == 1.0:
                 # use the original and do not make a copy
-                self.current_image_pil_scaled = self.current_image_pil
+                self.current_image_pil_scaled = image
             else:
-                new_image_size = tuple(map(lambda x: round(x*scale), self.current_image_pil.size))
-                self.current_image_pil_scaled = self.current_image_pil.resize(new_image_size, resample=Image.BILINEAR)
+                new_image_size = tuple(map(lambda x: round(x*scale), image.size))
+                self.current_image_pil_scaled = image.resize(new_image_size, resample=Image.BILINEAR)
 
         self.current_image = ImageTk.PhotoImage(self.current_image_pil_scaled)
         self._refresh_canvas()
 
     def _refresh_canvas(self):
+        '''DO NOT change the image itself but change the positioning
+        '''
         #self.canvas.create_image(0,0,image=self.current_image, anchor=tk.NW)
         
         self.canvas.delete(tk.ALL)
@@ -619,9 +689,10 @@ class ImageViewer():
         #self.label.configure(image=self.label.image)
 
         # crop
-        crop_xywh = self.get_crop_xywh()
+        image, use_proxy = self.get_image()
+        crop_xywh = self.get_crop_xywh(image)
         if crop_xywh is not None:
-            canvas_crop_xyxy = self.rectangle_to_canvas(*crop_xywh)
+            canvas_crop_xyxy = self.rectangle_to_canvas(image, *crop_xywh)
 
             is_crop_preview = self.chk_crop_preview_val.get()
             if is_crop_preview == 0:
@@ -636,16 +707,62 @@ class ImageViewer():
         # refresh 
         self._scale_update()
 
-    def _change_image(self):
-        image_relpath = self.image_relpath_list[self.img_idx].replace('/', os.sep)
-        image_path = os.path.join(self.images_basedir, image_relpath)
+    def get_original_image(self):
+        if self.current_image_pil is None:
+            image_path = os.path.join(self.images_basedir, self.image_relpath)
 
-        self.current_image_pil = Image.open(image_path)
-        #self.current_image = ImageTk.PhotoImage(self.current_image_pil)    # this is replaced by scaled image
+            self.current_image_pil = Image.open(image_path)
+        return self.current_image_pil
+
+
+    def get_image(self):
+        '''
+        Gets image (get proxy if user sets it and file available)
+        Returns:
+            image (PIL)
+            is_proxy (bool)
+        '''
+        use_proxy = bool(self.chk_use_proxy_val.get())
+        if use_proxy:
+            if self.current_image_proxy_pil is None:
+                if self.proxy_file_exists is None:
+                    proxy_path = os.path.join(self.images_proxydir, self.image_relpath)
+
+                    if os.path.isfile(proxy_path):
+                        self.proxy_file_exists = True
+                        self.current_image_proxy_pil = Image.open(proxy_path)
+                        return self.current_image_proxy_pil, True
+                    else:
+                        self.proxy_file_exists = False
+                        return self.get_original_image(), False
+                elif not self.proxy_file_exists:
+                    return self.get_original_image(), False
+                else:
+                    raise NotImplementedError()
+            else:
+                return self.current_image_proxy_pil, True
+
+        else:
+            return self.get_original_image(), False
+
+        
+
+    def _change_image(self):
+        self.image_relpath = self.image_relpath_list[self.img_idx].replace('/', os.sep)
+        image_path = os.path.join(self.images_basedir, self.image_relpath)
+        self.current_iamge_pil = None
+        self.current_image_proxy_pil = None
+        self.proxy_file_exists = None
+        #self.current_image_pil = Image.open(image_path)
+
+        use_proxy = bool(self.chk_use_proxy_val.get())
+        pil, is_proxy = self.get_image()
+        self.chk_is_proxy_val.set(int(is_proxy))
+        self.current_image = ImageTk.PhotoImage(pil)    # this is replaced by scaled image
 
         self._scale_update()
 
-        self.root.title("({:d}/{:d}) {:s}".format(self.img_idx+1, self.image_count(), image_relpath))
+        self.root.title("({:d}/{:d}) {:s}".format(self.img_idx+1, self.image_count(), self.image_relpath))
 
         # read exif
         self.camera_info = ''
@@ -681,7 +798,7 @@ class ImageViewer():
                     if key2 in metadata.keys():
                         metavalues.append(metadata[key2])
                     else:
-                        logger.warning('%s not found in EXIF of file %s', key2, image_relpath)
+                        logger.warning('%s not found in EXIF of file %s', key2, self.image_relpath)
                         bypass_format = True
 
                 if not bypass_format and 'format' in val.keys():
@@ -694,7 +811,7 @@ class ImageViewer():
 
 
         # check db
-        self.sqlite_cursor.execute('SELECT * FROM insta_tags WHERE file_relpath=?', (image_relpath,))
+        self.sqlite_cursor.execute('SELECT * FROM insta_tags WHERE file_relpath=?', (self.image_relpath,))
         db_imageinfo = self.sqlite_cursor.fetchone()
 
         logger.info("Loaded info from DB: %s", str(db_imageinfo))
@@ -716,15 +833,20 @@ class ImageViewer():
             elif db_imageinfo[SQL_CROP_RATIO] == '1:1':
                 self.radio_ratio_val.set(RATIO_11)
             else:
-                raise ValueError(f'Unknown ratio {db_imageinfo[SQL_CROP_RATIO]}')
+                ratio_xy = db_imageinfo[SQL_CROP_RATIO].split(':')
+                if len(ratio_xy) != 2:
+                    raise ValueError(f'Unknown ratio {db_imageinfo[SQL_CROP_RATIO]}')
+                self.radio_ratio_val.set(RATIO_CUSTOM)
+                self.spin_ratio_x_val.set(ratio_xy[0])
+                self.spin_ratio_y_val.set(ratio_xy[1])
 
             self.spin_crop_size_val.set(db_imageinfo[SQL_CROP_SIZE])
             self.spin_crop_x_val.set(db_imageinfo[SQL_CROP_X_OFFSET])
             self.spin_crop_y_val.set(db_imageinfo[SQL_CROP_Y_OFFSET])
             self._ratio_disability_update()
-            # TODO: load more from DB
 
         self._update_description_preview()
+        self.chk_is_uploaded_val.set(db_imageinfo[SQL_IS_INSTA_UPLOADED])
 
     def initialise_widgets(self):
         self.txt_description.delete(1.0,tk.END)
