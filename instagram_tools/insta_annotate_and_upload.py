@@ -65,7 +65,7 @@ class ImageViewer():
         self.camera_info = ''
         self.camera_hashtags = ''
 
-        self.current_iamge_pil = None
+        self.current_image_pil = None
         self.current_image_proxy_pil = None
         self.proxy_file_exists = None
 
@@ -98,6 +98,7 @@ class ImageViewer():
         self.btn_exit = tk.Button(self.fr_buttons, text="Exit",
                              command=self.root.quit)
         # We will have three button back ,forward and exit
+        self.btn_fast_back = tk.Button(self.fr_buttons, text="<< Fast Backward", command=self.fast_back, state=tk.DISABLED)
         self.btn_back = tk.Button(self.fr_buttons, text="< Back", command=self.back,
                              state=tk.DISABLED)
         self.txt_description = ScrolledText(self.fr_buttons, width=50, height=5, )
@@ -150,6 +151,8 @@ class ImageViewer():
 
         self.btn_forward = tk.Button(self.fr_buttons, text="Forward >",
                                 command=self.forward)
+        self.btn_fast_forward = tk.Button(self.fr_buttons, text="Fast Forward >>",
+                                command=self.fast_forward)
         self.txt_description_preview = ScrolledText(self.fr_buttons, width=50, height=20, state=tk.DISABLED)
 
         self.chk_is_proxy_val = tk.IntVar()
@@ -166,6 +169,7 @@ class ImageViewer():
         self.fr_btn_widgets.append(self.btn_last_edited)
         self.fr_btn_widgets.append(self.btn_upload_insta)
         self.fr_btn_widgets.append(self.btn_exit)
+        self.fr_btn_widgets.append(self.btn_fast_back)
         self.fr_btn_widgets.append(self.btn_back)
         self.fr_btn_widgets.append(self.txt_description)
         self.fr_btn_widgets.extend(self.hashtag_group_chkbtns)
@@ -181,13 +185,14 @@ class ImageViewer():
         self.fr_btn_widgets.append(self.spin_crop_y)
         self.fr_btn_widgets.append(self.chk_crop_preview)
         self.fr_btn_widgets.append(self.btn_forward)
+        self.fr_btn_widgets.append(self.btn_fast_forward)
         self.fr_btn_widgets.append(self.txt_description_preview)
 
 
         # row_widget
         row_widget = 0
 
-        for widget in self.fr_btn_widgets[:10]:
+        for widget in self.fr_btn_widgets[:11]:
             # until txt_description
             widget.grid(row=row_widget, column=0, columnspan=3, sticky="ew")
             row_widget += 1
@@ -217,6 +222,8 @@ class ImageViewer():
         self.chk_crop_preview.grid(row=row_widget, column=0, columnspan=3, sticky="ew")
         row_widget += 1
         self.btn_forward.grid(row=row_widget, column=0, columnspan=3, sticky="ew")
+        row_widget += 1
+        self.btn_fast_forward.grid(row=row_widget, column=0, columnspan=3, sticky="ew")
         row_widget += 1
         self.txt_description_preview.grid(row=row_widget, column=0, columnspan=3, sticky="ew")
         row_widget += 1
@@ -446,14 +453,14 @@ class ImageViewer():
         logger.info('Image saved to %s', output_filepath)
 
         #caption = self.get_insta_description()
-        caption = self.txt_description.get('1.0', tk.END).strip()
+        caption = self.txt_description_preview.get('1.0', tk.END).strip()
         logger.info('Instagram caption: %s', caption)
 
         #self.insta_bot.upload_photo(output_filepath, caption)
         self.insta_bot.upload_photo(output_filepath, caption)
         os.rename(output_filepath + '.REMOVE_ME', output_filepath)
 
-        self._sqlite_upsert_one_field('is_insta_upgoaded', 1)
+        self._sqlite_upsert_one_field('is_insta_uploaded', 1)
         self.chk_is_uploaded_val.set(1)
 
     def _on_close(self):
@@ -750,7 +757,7 @@ class ImageViewer():
     def _change_image(self):
         self.image_relpath = self.image_relpath_list[self.img_idx].replace('/', os.sep)
         image_path = os.path.join(self.images_basedir, self.image_relpath)
-        self.current_iamge_pil = None
+        self.current_image_pil = None
         self.current_image_proxy_pil = None
         self.proxy_file_exists = None
         #self.current_image_pil = Image.open(image_path)
@@ -862,48 +869,67 @@ class ImageViewer():
     def image_count(self):
         return len(self.image_relpath_list)
 
-    def forward(self):
-        if self.img_idx == self.image_count() -1:
-            return
-
-        self._save_txt_description()
-        self._save_crop_size()
-        self._save_crop_x()
-        self._save_crop_y()
-
-        self.img_idx += 1
-
-        self._change_image()
-
-        if self.img_idx == self.image_count() -1:
+    def _forward_back_disability_update(self, fast_count=20):
+        if self.img_idx >= self.image_count() - 1:
             self.btn_forward['state'] = tk.DISABLED
-
-        if self.img_idx == 1:
-            self.btn_back['state'] = tk.NORMAL
-
-        self.txt_description.focus()
-
-
-    def back(self):
-        if self.img_idx == 0:
-            return
-
-        self._save_txt_description()
-        self._save_crop_size()
-        self._save_crop_x()
-        self._save_crop_y()
-
-        self.img_idx -= 1
-
-        self._change_image()
-
-        if self.img_idx == self.image_count() -2:
+        else:
             self.btn_forward['state'] = tk.NORMAL
 
-        if self.img_idx == 0:
+        if self.img_idx >= self.image_count() - fast_count:
+            self.btn_fast_forward['state'] = tk.DISABLED
+        else:
+            self.btn_fast_forward['state'] = tk.NORMAL
+
+        if self.img_idx > 0:
+            self.btn_back['state'] = tk.NORMAL
+        else:
             self.btn_back['state'] = tk.DISABLED
 
+        if self.img_idx > fast_count:
+            self.btn_fast_back['state'] = tk.NORMAL
+        else:
+            self.btn_fast_back['state'] = tk.DISABLED
+
+    def forward(self, count = 1):
+        if self.img_idx >= self.image_count() - count:
+            return
+
+        self._save_txt_description()
+        self._save_crop_size()
+        self._save_crop_x()
+        self._save_crop_y()
+
+        self.img_idx += count
+
+        self._change_image()
+
+        self._forward_back_disability_update()
+
         self.txt_description.focus()
+
+
+    def back(self, count = 1):
+        if self.img_idx < count:
+            return
+
+        self._save_txt_description()
+        self._save_crop_size()
+        self._save_crop_x()
+        self._save_crop_y()
+
+        self.img_idx -= count
+
+        self._change_image()
+
+        self._forward_back_disability_update()
+
+        self.txt_description.focus()
+
+    def fast_forward(self):
+        self.forward(20)
+
+    def fast_back(self):
+        self.back(20)
 
 
 
