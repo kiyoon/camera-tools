@@ -261,7 +261,7 @@ class ImageViewer():
             reldir = root.replace(basedir, '')
             if reldir.startswith(os.sep):
                 reldir = reldir[1:]
-            self.image_relpath_list.extend(sorted([os.path.join(reldir,f.replace(os.sep, '/')) for f in files if f.lower().endswith('jpg')]))
+            self.image_relpath_list.extend(sorted([os.path.join(reldir,f).replace(os.sep, '/') for f in files if f.lower().endswith('jpg')]))
 
     def get_insta_description(self):
         text = self.txt_description.get('1.0', tk.END).strip()
@@ -755,8 +755,10 @@ class ImageViewer():
         
 
     def _change_image(self):
-        self.image_relpath = self.image_relpath_list[self.img_idx].replace('/', os.sep)
-        image_path = os.path.join(self.images_basedir, self.image_relpath)
+        # This is a Linux path with / no matter what OS you use.
+        self.image_relpath = self.image_relpath_list[self.img_idx]
+        # This is an OS dependent path with / or \.
+        image_path = os.path.join(self.images_basedir, self.image_relpath.replace('/', os.sep))
         self.current_image_pil = None
         self.current_image_proxy_pil = None
         self.proxy_file_exists = None
