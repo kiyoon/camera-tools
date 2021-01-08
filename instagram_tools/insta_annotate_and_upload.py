@@ -854,11 +854,12 @@ class ImageViewer():
             self.spin_crop_y_val.set(db_imageinfo[SQL_CROP_Y_OFFSET])
             self._ratio_disability_update()
 
+            if db_imageinfo[SQL_IS_INSTA_UPLOADED] is not None:
+                self.chk_is_uploaded_val.set(db_imageinfo[SQL_IS_INSTA_UPLOADED])
+            else:
+                self.chk_is_uploaded_val.set(0)
+
         self._update_description_preview()
-        if db_imageinfo[SQL_IS_INSTA_UPLOADED] is not None:
-            self.chk_is_uploaded_val.set(db_imageinfo[SQL_IS_INSTA_UPLOADED])
-        else:
-            self.chk_is_uploaded_val.set(0)
 
         # reset the modified flag
         self.txt_description.edit_modified(False)
