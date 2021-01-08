@@ -860,6 +860,9 @@ class ImageViewer():
         else:
             self.chk_is_uploaded_val.set(0)
 
+        # reset the modified flag
+        self.txt_description.edit_modified(False)
+
     def initialise_widgets(self):
         self.txt_description.delete(1.0,tk.END)
         # initialise hashtag groups (set to False)
