@@ -792,7 +792,8 @@ class ImageViewer():
                     if 'hashtag' in val.keys():
                         self.camera_hashtags += val['hashtag'].replace("%s", metavalue) + ' '
                     if 'hashtags' in val.keys():
-                        self.camera_hashtags += val['hashtags'][metavalue] + ' '
+                        if metavalue in val['hashtags'].keys():
+                            self.camera_hashtags += val['hashtags'][metavalue] + ' '
                     if 'conditional_hashtags' in val.keys():
                         for condition in val['conditional_hashtags'].keys():
                             if eval(metavalue + condition):

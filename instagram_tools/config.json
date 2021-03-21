@@ -32,7 +32,9 @@
 			"exif_field": "EXIF:LensModel",
 			"format": "%s",
 			"hashtags": {
-				"RF35mm F1.8 MACRO IS STM": "#rf35mm"
+				"RF35mm F1.8 MACRO IS STM": "#rf35mm",
+				"EF-M22mm f/2 STM": "#efm22mm",
+				"EF50mm f/1.8 STM": "#niftyfifty #ef50mm"
 				
 			}
 		},
