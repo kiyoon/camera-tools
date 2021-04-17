@@ -24,9 +24,8 @@ import glob
 import srt
 import datetime
 
+import srt_utils
 
-SOURCE_FPS = 24
-TARGET_FPS = 24000 / 1001       # 23.976
 
 if __name__ == "__main__":
     logger = verboselogs.VerboseLogger(__name__)
@@ -54,10 +53,7 @@ if __name__ == "__main__":
             with open(source_file, 'r', encoding="utf8") as f:
                 srt_lines = list(srt.parse(f))
 
-            #print(srt_lines)
-            for subtitle in srt_lines:
-                subtitle.start = datetime.timedelta(seconds=subtitle.start.total_seconds() * SOURCE_FPS / TARGET_FPS)
-                subtitle.end = datetime.timedelta(seconds=subtitle.end.total_seconds() * SOURCE_FPS / TARGET_FPS)
+            srt_utils.srt_drift_fix_NTSC(srt_lines)
 
             with open(dest_file, 'w', encoding="utf8") as f:
                 f.write(srt.compose(srt_lines))
