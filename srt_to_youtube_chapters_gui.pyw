@@ -39,8 +39,9 @@ class SrtToYTChapters():
         # The geometry of the box which will be displayed
         # on the screen
         self.root.geometry("420x500")
+        self.root.minsize(300,300)
         self.root.title("SRT to YouTube Chapters")
-        self.root.resizable(False, False)
+        #self.root.resizable(False, False)
         self.btn_open_srt = tk.Button(self.root, text="Open SRT", command=self._on_click_open_srt)
         self.label_offset_hour = tk.Label(self.root,text='offset (hour)')
         self.spin_offset_hour_val = tk.StringVar(value="0")
@@ -50,7 +51,7 @@ class SrtToYTChapters():
         self.combo_fps_val = tk.StringVar(value=self.combo_fps_values[0])
         self.combo_fps=ttk.Combobox(self.root, state='readonly', values=self.combo_fps_values, textvariable=self.combo_fps_val)
 
-        self.txt_youtube_chapters = ScrolledText(self.root, width=50, height=20, state=tk.DISABLED)
+        self.txt_youtube_chapters = ScrolledText(self.root, state=tk.DISABLED)
 
         self.btn_save_srt = tk.Button(self.root, text="Save SRT (optional: apply sync fix to SRT)", command=self._on_click_save_srt)
 
@@ -64,10 +65,14 @@ class SrtToYTChapters():
         self.combo_fps.grid(row=row_widget, column=1, columnspan=2, sticky="ew", pady=10, padx=5)
 
         row_widget += 1
-        self.txt_youtube_chapters.grid(row=row_widget, column=0, columnspan=3, sticky="ew")
+        self.txt_youtube_chapters.grid(row=row_widget, column=0, columnspan=3, sticky="nsew")
+        self.root.rowconfigure(row_widget, weight=1)    # scrolledtext expand to fill
         row_widget += 1
         self.btn_save_srt.grid(row=row_widget, column=0, columnspan=3, sticky="ew", pady=10, padx=10)
 
+        self.root.columnconfigure(0, weight=1)
+        self.root.columnconfigure(1, weight=1)
+        self.root.columnconfigure(2, weight=1)
 
         self.fr_btn_widgets = []    # list of all the widgets in the left frame (in order), for grid (partially) and for binding click focus
         self.fr_btn_widgets.append(self.btn_open_srt)
