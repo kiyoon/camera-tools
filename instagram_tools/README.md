@@ -5,4 +5,3 @@ Python >= 3.7
 # TODO
 1. delete the file (move to recycle) & remove from DB  
 2. Not set / unflagged / Flagged
-3. Rotation EXIF tag

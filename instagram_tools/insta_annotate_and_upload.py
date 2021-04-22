@@ -442,7 +442,6 @@ class ImageViewer():
         image = self.get_original_image()
         crop_xywh = self.get_crop_xywh(image)
         img = self.get_scaled_cropped_image(image, 1.0, crop_xywh, resample=Image.LANCZOS)
-        img, _, _ = exif_transpose_delete_exif(img)
         img = watermark_signature(img).convert('RGB')
 
         output_filepath = os.path.join(self.images_outputdir, self.image_relpath_list[self.img_idx])
@@ -718,7 +717,7 @@ class ImageViewer():
         if self.current_image_pil is None:
             image_path = os.path.join(self.images_basedir, self.image_relpath)
 
-            self.current_image_pil = Image.open(image_path)
+            self.current_image_pil, _, _ = exif_transpose_delete_exif(Image.open(image_path))
         return self.current_image_pil
 
 
@@ -737,7 +736,7 @@ class ImageViewer():
 
                     if os.path.isfile(proxy_path):
                         self.proxy_file_exists = True
-                        self.current_image_proxy_pil = Image.open(proxy_path)
+                        self.current_image_proxy_pil, _, _ = exif_transpose_delete_exif(Image.open(proxy_path))
                         return self.current_image_proxy_pil, True
                     else:
                         self.proxy_file_exists = False
