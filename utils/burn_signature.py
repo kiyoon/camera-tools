@@ -2,6 +2,7 @@ from .pil_text import write_with_shadow
 from PIL import Image, ImageFont
 
 import os
+import math
 _script_path = os.path.dirname(os.path.abspath( __file__ ))
 
 def _get_youtube_x(insta_x, fa_youtube_width, fa_insta_width):
@@ -40,7 +41,7 @@ def _get_insta_xy_bottom_right(img_size, fa_youtube_size, fa_insta_size, youtube
 
 
 def watermark_signature(img, insta_id = "kiyoon0", youtube_name = "Kiyoon Kim"):
-    font_size = img.width * img.height // 100000
+    font_size = round(math.sqrt(img.width * img.height) / 50)
     font_logos = ImageFont.truetype(os.path.join(_script_path, 'fonts', 'FontAwesome.otf'), font_size)
     font_name = ImageFont.truetype(os.path.join(_script_path, 'fonts', 'bureau agency fb.otf'), font_size)
 
