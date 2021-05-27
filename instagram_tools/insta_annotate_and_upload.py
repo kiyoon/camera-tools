@@ -7,8 +7,11 @@
 # importing the tkinter module and PIL that
 # is pillow module
 import tkinter as tk
+from tkinter import ttk
 #from tkinter.scrolledtext import ScrolledText
 from scrolled_text_w_callback import ScrolledText
+#from scrollable_frame import ScrollableFrame
+from tkscrolledframe import ScrolledFrame
 from PIL import ImageTk, Image, ImageOps
 
 
@@ -58,9 +61,9 @@ SQL_SEPARATOR = ';'
 class ImageViewer():
 
     def __init__(self, root_window, insta_id = None, insta_password = None):
+        self.insta_bot_logged_in = False
         if insta_id is not None:
             self.insta_bot = Bot()
-            self.insta_bot.login(username=insta_id, password=insta_password)
 
         self.camera_info = ''
         self.camera_hashtags = ''
@@ -76,11 +79,29 @@ class ImageViewer():
         # The geometry of the box which will be displayed
         # on the screen
         self.root.geometry("1400x1000")
-        self.fr_buttons = tk.Frame(self.root, relief=tk.RAISED, bd=2)
-        self.fr_buttons.pack(side=tk.LEFT, fill=tk.Y)
 
-        self.sld_scale_var = tk.DoubleVar(value=1.0)
-        self.sld_scale = tk.Scale(self.fr_buttons, from_ = 0.0, to = 4.0, resolution=0.1, orient=tk.HORIZONTAL, variable=self.sld_scale_var, command=self._scale_update)
+        #self.fr_buttons_scr = tk.Frame(self.root, relief=tk.RAISED, bd=2)
+        #self.fr_buttons_scr.pack(side=tk.LEFT, fill=tk.Y)
+        #self.fr_buttons = Scrollable(self.fr_buttons_scr)
+        #self.fr_buttons_scr = ScrollableFrame(self.root, relief=tk.RAISED, bd=2)
+        #self.fr_buttons_scr = ScrollableFrame(self.root, relief=tk.RAISED, bd=2)
+        #self.fr_buttons_scr.pack(side=tk.LEFT, fill=tk.Y)
+        #self.fr_buttons = self.fr_buttons_scr.scrollable_frame
+
+        self.fr_buttons_scr = ScrolledFrame(self.root, width=600, relief=tk.RAISED, bd=2, scrollbars='vertical')
+        self.fr_buttons_scr.pack(side=tk.LEFT, fill=tk.BOTH)
+        self.fr_buttons_scr.bind_arrow_keys(root)
+        self.fr_buttons_scr.bind_scroll_wheel(root)
+        self.fr_buttons = self.fr_buttons_scr.display_widget(tk.Frame)
+
+        #self.fr_buttons.grid(row=0, column=0, columnspan=1, sticky="ew", pady=5)
+
+        self.sld_scale_val = tk.DoubleVar(value=1.0)
+        self.sld_scale = tk.Scale(self.fr_buttons, from_ = 0.0, to = 4.0, resolution=0.1, orient=tk.HORIZONTAL, variable=self.sld_scale_val, command=self._scale_update)
+
+        # range will be set at the end of the initialisation
+        self.sld_imgidx_val = tk.IntVar(value=1)
+        self.sld_imgidx = tk.Scale(self.fr_buttons, from_ = 1, to = 1, resolution=1, orient=tk.HORIZONTAL, variable=self.sld_imgidx_val, command=self._imgidx_update)
 
         self.chk_show_uploaded_val = tk.IntVar(value=1)
         self.chk_show_uploaded = tk.Checkbutton(self.fr_buttons, text='show uploaded', variable=self.chk_show_uploaded_val, command=self._on_show_tagged_untagged)
@@ -162,6 +183,7 @@ class ImageViewer():
 
         self.fr_btn_widgets = []    # list of all the widgets in the left frame (in order), for grid (partially) and for binding click focus
         self.fr_btn_widgets.append(self.sld_scale)
+        self.fr_btn_widgets.append(self.sld_imgidx)
         self.fr_btn_widgets.append(self.chk_show_uploaded)
         self.fr_btn_widgets.append(self.chk_show_not_uploaded)
         self.fr_btn_widgets.append(self.chk_show_untagged)
@@ -192,7 +214,7 @@ class ImageViewer():
         # row_widget
         row_widget = 0
 
-        for widget in self.fr_btn_widgets[:11]:
+        for widget in self.fr_btn_widgets[:12]:
             # until txt_description
             widget.grid(row=row_widget, column=0, columnspan=3, sticky="ew")
             row_widget += 1
@@ -234,18 +256,16 @@ class ImageViewer():
         self._sqlite_connect()
         self._sqlite_create_table()
 
-        #self.fr_buttons.grid(row=0, column=0, sticky="ns")
-        #root.grid(row=0, column=1, sticky="nsew")
 
         self._read_image_list(self.images_basedir)
-        self.label = tk.Label()
         self.canvas = tk.Canvas(self.root, width=300, height=200)#, bg="white")
         self.canvas.pack(expand=tk.YES, fill=tk.BOTH)
         self.img_idx = 0
         self._change_image()
 
-        # We have to show the the box so this below line is needed
-        #self.label.grid(row=0, column=1, columnspan=3)
+
+        # set self.sld_imgidx range
+        self.sld_imgidx.configure(to=self.image_count())
 
         self._key_bind()
 
@@ -355,7 +375,7 @@ class ImageViewer():
         self.sqlite_conn.commit()
 
     def _sqlite_connect(self):
-        self.sqlite_conn = sqlite3.connect(os.path.join(SCRIPT_DIRPATH, 'insta_tags.db'))
+        self.sqlite_conn = sqlite3.connect(self.config['database_path'])
         self.sqlite_cursor = self.sqlite_conn.cursor()
 
     def _sqlite_create_table(self):
@@ -455,6 +475,14 @@ class ImageViewer():
         caption = self.txt_description_preview.get('1.0', tk.END).strip()
         logger.info('Instagram caption: %s', caption)
 
+        
+        if not self.insta_bot_logged_in:
+            # True / False
+            self.insta_bot_logged_in = self.insta_bot.login(username=insta_id, password=insta_password)
+        if not self.insta_bot_logged_in:
+            logger.error('Failed to log in to Instagram')
+            return
+
         #self.insta_bot.upload_photo(output_filepath, caption)
         self.insta_bot.upload_photo(output_filepath, caption)
         os.rename(output_filepath + '.REMOVE_ME', output_filepath)
@@ -545,7 +573,7 @@ class ImageViewer():
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
         image_width, image_height = image.size
-        scale = self.sld_scale_var.get()
+        scale = self.sld_scale_val.get()
         # adding canvas offset
         canvas_x = x * scale + (canvas_width - image_width * scale)/2
         canvas_y = y * scale + (canvas_height - image_height * scale)/2
@@ -657,13 +685,17 @@ class ImageViewer():
         return current_image_pil_scaled
 
 
+    def _imgidx_update(self, event=None):
+        index = self.sld_imgidx_val.get() - 1
+        self.jump(index)
+
     def _scale_update(self, event=None):
         '''Manipulate original image
         1. Apply scaling
         2. Apply crop preview
         3. Apply proxy
         '''
-        scale = self.sld_scale_var.get()
+        scale = self.sld_scale_val.get()
 
         image, use_proxy = self.get_image()
         crop_xywh = self.get_crop_xywh(image)
@@ -899,7 +931,33 @@ class ImageViewer():
         else:
             self.btn_fast_back['state'] = tk.DISABLED
 
+    def jump(self, imgidx):
+        '''
+        Jump to the img index
+        '''
+        if self.img_idx == imgidx:
+            return
+        if imgidx < 0:
+            return
+        if imgidx >= self.image_count():
+            return
+
+        self._save_txt_description()
+        self._save_crop_size()
+        self._save_crop_x()
+        self._save_crop_y()
+
+        self.img_idx = imgidx
+
+        self._change_image()
+
+        self._forward_back_disability_update()
+
+        self.txt_description.focus()
+        self.sld_imgidx_val.set(imgidx+1)
+
     def forward(self, count = 1):
+        '''
         if self.img_idx >= self.image_count() - count:
             return
 
@@ -915,9 +973,12 @@ class ImageViewer():
         self._forward_back_disability_update()
 
         self.txt_description.focus()
+        '''
+        self.jump(self.img_idx + count)
 
 
     def back(self, count = 1):
+        '''
         if self.img_idx < count:
             return
 
@@ -933,6 +994,8 @@ class ImageViewer():
         self._forward_back_disability_update()
 
         self.txt_description.focus()
+        '''
+        self.jump(self.img_idx - count)
 
     def fast_forward(self):
         self.forward(20)

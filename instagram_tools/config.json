@@ -70,5 +70,6 @@
 
 	"images_basedir": "E:\\Photo\\instagram_uploads\\input",
 	"images_proxydir": "E:\\Photo\\instagram_uploads\\proxy",
-	"images_outputdir": "E:\\Photo\\instagram_uploads\\output"
+	"images_outputdir": "E:\\Photo\\instagram_uploads\\output",
+	"database_path": "C:\\Users\\Kiyoon Kim\\OneDrive\\Python\\insta_tags.db"
 }

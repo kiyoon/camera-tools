@@ -1,6 +1,6 @@
 # requirements
 Python >= 3.7  
-`pip install coloredlogs verboselogs instabot requests`
+`pip install coloredlogs verboselogs instabot requests tkScrolledFrame`
 
 # TODO
 1. delete the file (move to recycle) & remove from DB  
