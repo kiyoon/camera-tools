@@ -6,6 +6,7 @@
 		"day": "#day #afternoon",
 		"food": "#food #음식",
 		"seoul": "#seoul #korea #southkorea #서울 #경기도 #경기",
+		"edinburgh": "#edinburgh #uk #scotland #unitedkingdom #영국 #스코틀랜드 #에딘버러 #에든버러",
 		"family": "#family #siblings #가족",
 		"yacht": "#yacht #boat #sailing #river #party #파티 #요트 #한강 #강 #바다 #보트",
 		"animal": "#animal #animals #pet #wildanimal #동물 #반려견 #반려동물 #야생동물",
@@ -68,8 +69,8 @@
 		
 	},
 
-	"images_basedir": "E:\\Photo\\instagram_uploads\\input",
-	"images_proxydir": "E:\\Photo\\instagram_uploads\\proxy",
-	"images_outputdir": "E:\\Photo\\instagram_uploads\\output",
+	"images_basedir": "G:\\Photo\\instagram_uploads\\input",
+	"images_proxydir": "G:\\Photo\\instagram_uploads\\proxy",
+	"images_outputdir": "G:\\Photo\\instagram_uploads\\output",
 	"database_path": "C:\\Users\\Kiyoon Kim\\OneDrive\\Python\\insta_tags.db"
 }
