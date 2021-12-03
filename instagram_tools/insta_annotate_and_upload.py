@@ -111,6 +111,8 @@ class ImageViewer():
         self.chk_show_untagged = tk.Checkbutton(self.fr_buttons, text='show untagged', variable=self.chk_show_untagged_val, command=self._on_show_tagged_untagged)
         self.chk_use_proxy_val = tk.IntVar(value=1)
         self.chk_use_proxy = tk.Checkbutton(self.fr_buttons, text='Use proxy if available', variable=self.chk_use_proxy_val, command=self._on_use_proxy)
+        self.chk_use_exif_val = tk.IntVar(value=0)
+        self.chk_use_exif = tk.Checkbutton(self.fr_buttons, text='Use EXIF metadata if available (slow)', variable=self.chk_use_exif_val, command=self._on_use_exif)
         self.btn_last_edited = tk.Button(self.fr_buttons, text="Move to last edited", command=self._on_click_last_edited)
 
         self.btn_upload_insta = tk.Button(self.fr_buttons, text="Upload to Instagram", command=self._on_click_upload_insta)
@@ -188,6 +190,7 @@ class ImageViewer():
         self.fr_btn_widgets.append(self.chk_show_not_uploaded)
         self.fr_btn_widgets.append(self.chk_show_untagged)
         self.fr_btn_widgets.append(self.chk_use_proxy)
+        self.fr_btn_widgets.append(self.chk_use_exif)
         self.fr_btn_widgets.append(self.btn_last_edited)
         self.fr_btn_widgets.append(self.btn_upload_insta)
         self.fr_btn_widgets.append(self.btn_exit)
@@ -214,7 +217,7 @@ class ImageViewer():
         # row_widget
         row_widget = 0
 
-        for widget in self.fr_btn_widgets[:12]:
+        for widget in self.fr_btn_widgets[:13]:
             # until txt_description
             widget.grid(row=row_widget, column=0, columnspan=3, sticky="ew")
             row_widget += 1
@@ -451,6 +454,15 @@ class ImageViewer():
             _, is_proxy = self.get_image()
             self.chk_is_proxy_val.set(is_proxy)
         self._scale_update()
+
+    def _on_use_exif(self):
+        if self.chk_use_exif_val.get() == 0:
+            self.camera_info = ''
+            self.camera_hashtags = ''
+        else:
+            self._read_camera_exif()
+
+        self._update_description_preview()
 
 
     def _on_click_last_edited(self):
@@ -723,7 +735,6 @@ class ImageViewer():
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
         self.canvas.create_image(canvas_width/2,canvas_height/2,image=self.current_image, anchor=tk.CENTER)
-        #self.label.image = ImageTk.PhotoImage(Image.open(image_path))
         #self.label.configure(image=self.label.image)
 
         # crop
@@ -747,9 +758,7 @@ class ImageViewer():
 
     def get_original_image(self):
         if self.current_image_pil is None:
-            image_path = os.path.join(self.images_basedir, self.image_relpath)
-
-            self.current_image_pil, _, _ = exif_transpose_delete_exif(Image.open(image_path))
+            self.current_image_pil, _, _ = exif_transpose_delete_exif(Image.open(self.current_image_path))
         return self.current_image_pil
 
 
@@ -784,32 +793,12 @@ class ImageViewer():
             return self.get_original_image(), False
 
         
-
-    def _change_image(self):
-        # This is a Linux path with / no matter what OS you use.
-        self.image_relpath = self.image_relpath_list[self.img_idx]
-        # This is an OS dependent path with / or \.
-        image_path = os.path.join(self.images_basedir, self.image_relpath.replace('/', os.sep))
-        self.current_image_pil = None
-        self.current_image_proxy_pil = None
-        self.proxy_file_exists = None
-        #self.current_image_pil = Image.open(image_path)
-
-        use_proxy = bool(self.chk_use_proxy_val.get())
-        pil, is_proxy = self.get_image()
-        self.chk_is_proxy_val.set(int(is_proxy))
-        self.current_image = ImageTk.PhotoImage(pil)    # this is replaced by scaled image
-
-        self._scale_update()
-
-        self.root.title("({:d}/{:d}) {:s}".format(self.img_idx+1, self.image_count(), self.image_relpath))
-
-        # read exif
+    def _read_camera_exif(self):
         self.camera_info = ''
         self.camera_hashtags = ''
         try:
             with exiftool.ExifTool() as et:
-                metadata = et.get_metadata(image_path)
+                metadata = et.get_metadata(self.current_image_path)
         except json.decoder.JSONDecodeError:
             return
 
@@ -850,6 +839,28 @@ class ImageViewer():
             else:
                 raise ValueError()
 
+    #@profile
+    def _change_image(self):
+        # This is a Linux path with / no matter what OS you use.
+        self.image_relpath = self.image_relpath_list[self.img_idx]
+        # This is an OS dependent path with / or \.
+        self.current_image_path = os.path.join(self.images_basedir, self.image_relpath.replace('/', os.sep))
+        self.current_image_pil = None
+        self.current_image_proxy_pil = None
+        self.proxy_file_exists = None
+
+        use_proxy = bool(self.chk_use_proxy_val.get())
+        pil, is_proxy = self.get_image()
+        self.chk_is_proxy_val.set(int(is_proxy))
+        self.current_image = ImageTk.PhotoImage(pil)    # this is replaced by scaled image
+
+        self._scale_update()
+
+        self.root.title("({:d}/{:d}) {:s}".format(self.img_idx+1, self.image_count(), self.image_relpath))
+
+        # read exif
+        if self.chk_use_exif_val.get() == 1:
+            self._read_camera_exif()
 
         # check db
         self.sqlite_cursor.execute('SELECT * FROM insta_tags WHERE file_relpath=?', (self.image_relpath,))
