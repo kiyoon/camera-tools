@@ -58,6 +58,27 @@ SQL_LAST_UPLOADED_UTC = 8
 
 SQL_SEPARATOR = ';'
 
+
+# locate file on Explorer on Windows
+import platform
+import subprocess
+
+if platform.system() == 'Windows':
+    FILEBROWSER_PATH = os.path.join(os.getenv('WINDIR'), 'explorer.exe')
+
+    def explore(path):
+        # explorer would choke on forward slashes
+        path = os.path.normpath(path)
+
+        if os.path.isdir(path):
+            subprocess.run([FILEBROWSER_PATH, path])
+        elif os.path.isfile(path):
+            subprocess.run([FILEBROWSER_PATH, '/select,', path])
+else:
+    def explore(path):
+        logger.warning('Opening explorer not supported on non-Windows systems.')
+
+
 class ImageViewer():
 
     def __init__(self, root_window, insta_id = None, insta_password = None):
@@ -487,7 +508,9 @@ class ImageViewer():
         caption = self.txt_description_preview.get('1.0', tk.END).strip()
         logger.info('Instagram caption: %s', caption)
 
-        
+        logger.info('Instead of uploading to Instagram, directing you to the modified file so you can upload yourself. Sorry!')
+        explore(output_filepath)
+        '''
         if not self.insta_bot_logged_in:
             # True / False
             self.insta_bot_logged_in = self.insta_bot.login(username=insta_id, password=insta_password)
@@ -501,6 +524,7 @@ class ImageViewer():
 
         self._sqlite_upsert_one_field('is_insta_uploaded', 1)
         self.chk_is_uploaded_val.set(1)
+        '''
 
     def _on_close(self):
         self._save_txt_description()
