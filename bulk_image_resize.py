@@ -25,6 +25,8 @@ parser.add_argument('destination_dir', type=str,
         help='Destination directory')
 parser.add_argument('-d', '--divide', type=int, default=2,
         help='Output image resolution (width, height) is divided by this factor.')
+parser.add_argument('-mh', '--minimum_height', type=int, default=2272,
+        help='Output image resolution (height) do not go below this. If the original is smaller, stick to the original resolution. Default value is the resolution with Canon R6 when crop mode is enabled.')
 parser.add_argument('-q', '--quality', type=int, default=95,
         help='Output image jpeg quality.')
 parser.add_argument('-r', '--resample', type=str, choices=['nearest', 'bilinear', 'bicubic', 'lanczos'], default='bicubic',
@@ -90,7 +92,18 @@ if __name__ == '__main__':
                     logger.info("Resizing file to: %s", dest_file)
                     img = Image.open(source_file)
                     src_width, src_height = img.size
-                    dest_width, dest_height = src_width // args.divide, src_height // args.divide 
+                    if src_height <= args.minimum_height:
+                        logger.info("Keeping the resolution and re-encoding to: %s", dest_file)
+                        dest_width, dest_height = src_width, src_height 
+                    else:
+                        dest_width, dest_height = src_width // args.divide, src_height // args.divide 
+                        if dest_height < args.minimum_height:
+                            dest_height = args.minimum_height
+                            dest_width = round((src_width / src_height) * dest_height)
+                            logger.info("Setting the resolution to the minimum height %d and saving to: %s", dest_height, dest_file)
+                        else:
+                            logger.info("Resizing file to: %s", dest_file)
+
                     img = img.resize((dest_width,dest_height), resample=resample_str_to_pil_code(args.resample))
 
                     if 'exif' in img.info.keys():
