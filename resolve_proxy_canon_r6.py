@@ -6,22 +6,10 @@ import argparse
 from shutil import copy2
 import filecmp
 import coloredlogs, logging, verboselogs
-import exiftool
 from fractions import Fraction
 
-EXIF_CAMERA_MODEL = 'EXIF:Model'
-#EXIF_VIDEO_WIDTH = "EXIF:RelatedImageWidth"
-#EXIF_VIDEO_HEIGHT = "EXIF:RelatedImageHeight"
-EXIF_VIDEO_HEIGHT = "QuickTime:ImageHeight"
-EXIF_VIDEO_FPS = "QuickTime:VideoFrameRate"
-EXIF_MKV_VIDEO_HEIGHT = "Matroska:ImageHeight"
-EXIF_MKV_VIDEO_FPS = "Matroska:VideoFrameRate"
 DOUBLE_BITRATE_FPS = [40,80]
 QUADRUPLE_BITRATE_FPS = [80, 150]
-
-EXIF_OBS_GRAPHICS_MODE = 'QuickTime:GraphicsMode'
-EXIF_OBS_TRACK2NAME = 'QuickTime:Track2Name'
-OBS_AUDIOTRACK_NAME = 'All (recording)'         # Assuming that the first audio track is names as this for all OBS videos.
 
 COLOUR_RANGE_FULL = ["-color_range", "pc", "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709"]
 
@@ -32,7 +20,8 @@ class Formatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionH
     pass
 
 parser = argparse.ArgumentParser(
-        description='''Find and copy all Canon MP4 files to HEVC 10bit 4:2:0 MOV proxy files using Nvidia-accelerated encoding.
+        description='''Find and transcode all Canon MP4 files (HEVC 10bit 4:2:2 files) to HEVC 10bit 4:2:0 MOV proxy files using Nvidia-accelerated encoding.
+HEVC 10bit 4:2:2 are not capable of GPU-accelerated decoding, so the playback is extremely slow.
 Uses short GOP for faster decoding.
 Always force to 1080p quality.
 Suitable, but not limited to Canon Log files shot with R3, R5, R6, and R7.
@@ -57,28 +46,15 @@ def ffprobe(source_file):
     ffprobe_out = ffprobe_out.decode('utf-8')
     return json.loads(ffprobe_out)
 
-eligible_cameras = ['R3', 'R5', 'R6', 'R7']
-def check_file_eligible_video(source_file, ext):
+
+def is_mp4_hevc_10bit_422(source_file, ext):
     if ext == "mp4":
-        try:
-            with exiftool.ExifTool() as et:
-                metadata = et.get_metadata(source_file)
-        except json.decoder.JSONDecodeError:
-            ffprobe_out = ffprobe(source_file)
-            return 'failed', None, ffprobe_out      # failed to read the metadata. Possibly Korean filename?
+        ffprobe_out = ffprobe(source_file)
+        if ffprobe_out['streams'][0]['codec_name'] == 'hevc':
+            if ffprobe_out['streams'][0]['pix_fmt'] == 'yuv422p10le':
+                return True, ffprobe_out
 
-        if EXIF_CAMERA_MODEL in metadata.keys():
-            camera_model = metadata[EXIF_CAMERA_MODEL]
-
-            if camera_model == 'Canon EOS R5':  # Check if the video is taken from the predefined camera
-                return 'R5', metadata, None
-            elif camera_model == 'Canon EOS R6':  # Check if the video is taken from the predefined camera
-                return 'R6', metadata, None
-            elif camera_model == 'Canon EOS R7':  # Check if the video is taken from the predefined camera
-                return 'R7', metadata, None
-            elif camera_model == 'Canon EOS R3':  # Check if the video is taken from the predefined camera
-                return 'R3', metadata, None
-    return 'unknown', None, None
+    return False, ffprobe_out
 
 
 if __name__ == '__main__':
@@ -120,8 +96,8 @@ if __name__ == '__main__':
                 if filecmp.cmp(source_file,dest_file,shallow=True):     # doesn't compare file content
                     logger.info("Skipping file (already exists): %s", dest_file)
                 else:
-                    camera_brand, _, ffprobe_source = check_file_eligible_video(source_file, ext)
-                    if camera_brand in eligible_cameras:
+                    perform_transcode, ffprobe_source = is_mp4_hevc_10bit_422(source_file, ext)
+                    if perform_transcode:
                         if args.verify_encoded_videos:
                             if ffprobe_source is None:
                                 ffprobe_source = ffprobe(source_file)
@@ -138,26 +114,16 @@ if __name__ == '__main__':
                         nb_error += 1
             else:
                 try:
-                    camera_brand, metadata, ffprobe_out = check_file_eligible_video(source_file, ext)
+                    perform_transcode, ffprobe_out = is_mp4_hevc_10bit_422(source_file, ext)
 
-                    if camera_brand == 'failed':
-                        logger.warning("Cannot identify metadata from video: %s. Korean file names may not be supported.", source_file)
-                        nb_warning += 1
-                        continue
-                    elif camera_brand == 'unknown':
-                        logger.info("Skipping non-supported videos not taken from Canon: %s", source_file)
+                    if not perform_transcode:
+                        logger.info("Skipping non-supported videos that are not HEVC 10bit 4:2:2: %s", source_file)
                         continue
 
 
-                    if metadata is not None:
-                        video_height = int(metadata[EXIF_VIDEO_HEIGHT])
-                        video_fps = float(metadata[EXIF_VIDEO_FPS])
-                    elif ffprobe_out is not None:
-                        # read video height and fps using ffprobe
-                        video_height = int(ffprobe_out['streams'][0]['height'])
-                        video_fps = float(Fraction(ffprobe_out['streams'][0]['r_frame_rate']))
-                    else:
-                        raise Exception("Can't read metadata")
+                    # read video height and fps using ffprobe
+                    video_height = int(ffprobe_out['streams'][0]['height'])
+                    video_fps = float(Fraction(ffprobe_out['streams'][0]['r_frame_rate']))
 
                     bitrate = args.bitrate
                     if DOUBLE_BITRATE_FPS[0] <= video_fps < DOUBLE_BITRATE_FPS[1]:
