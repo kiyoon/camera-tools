@@ -45,7 +45,7 @@ if __name__ == '__main__':
         clip_fullpath_wo_ext, ext = os.path.splitext(clip_fullpath)
 
         if ext.lower() == '.mp4':
-            proxy_path = clip_fullpath_wo_ext.replace('G:\\Video', 'I:\\Videos\\Davinci Resolve\\Proxies', 1) + '.mov'
+            proxy_path = clip_fullpath_wo_ext.replace('G:\\Video', 'I:\OneDrive - University of Edinburgh\Davinci Resolve\\Proxies', 1) + '.mov'
 
             tqdm.write(f'Linking {clip_fullpath}')
             tqdm.write(f'To proxy: {proxy_path}')

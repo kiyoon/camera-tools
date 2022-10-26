@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
 
+import argparse
+import filecmp
+import logging
 import os
 import subprocess
-import argparse
+import sys
 from shutil import copy2, move
-import filecmp
-import coloredlogs, logging, verboselogs
+
+import coloredlogs
+import verboselogs
+
 import exiftool
+
 
 class Formatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):
     pass
 
 parser = argparse.ArgumentParser(
         description='''Copy the source directory to destination directory, maintaining the directory structure of another directory. 
+More precisely, match the files with only file names and try to copy. The source directory should only have unique file names.
 Author: Kiyoon Kim (yoonkr33@gmail.com)''',
         formatter_class=Formatter)
 parser.add_argument('source_dir', type=str, 
@@ -47,6 +54,23 @@ if __name__ == '__main__':
     args.destination_dir = args.destination_dir.rstrip('/')
     args.dir_like = args.dir_like.rstrip('\\')
     args.dir_like = args.dir_like.rstrip('/')
+
+    logger.info("Analysing source directory..")
+    filename_to_source_path = {}
+    for root, dirs, files in os.walk(args.source_dir):
+        for name in files:
+            ext = os.path.splitext(name)[1][1:].lower()
+            if ext == 'jpg':
+                sourcepath = os.path.join(root, name)
+                if name in filename_to_source_path.keys():
+                    logger.error("Multiple files with the same name in the source folder detected:")
+                    logger.error(f"{filename_to_source_path[name]} and {sourcepath}")
+                    logger.error(f"This script detects the folder structure of `args.dir_like`, and organises the source directory just like that.")
+                    logger.error(f"So the file names in the source directory should be unique, and the folder structure is completely ignored in that directory.")
+                    logger.error(f"Otherwise it cannot match the file.")
+                    sys.exit(1)
+                filename_to_source_path[name] = sourcepath
+
     
     logger.info("Creating directory: %s", args.destination_dir)
     os.makedirs(args.destination_dir, exist_ok=True)
@@ -70,7 +94,7 @@ if __name__ == '__main__':
         for name in files:
             ext = os.path.splitext(name)[1][1:].lower()
             if ext == 'jpg':
-                source_file = os.path.join(args.source_dir, name)
+                source_file = filename_to_source_path[name]
                 dest_file = os.path.join(dest_root, name)
                 logger.info("%s file to: %s", copy_msg, dest_file)
                 if os.path.isfile(source_file):
@@ -81,7 +105,7 @@ if __name__ == '__main__':
 
                 if args.copy_json:
                     json_name = name + '.json'
-                    source_file = os.path.join(args.source_dir, json_name)
+                    source_file = filename_to_source_path[name] + '.json'
                     dest_file = os.path.join(dest_root, json_name)
                     logger.info("%s file to: %s", copy_msg, dest_file)
 
@@ -92,8 +116,8 @@ if __name__ == '__main__':
                         nb_warning += 1
 
                 if args.copy_cr3:
+                    source_file = os.path.splitext(filename_to_source_path[name])[0] + '.CR3'
                     cr3_name = os.path.splitext(name)[0] + '.CR3'
-                    source_file = os.path.join(args.source_dir, cr3_name)
                     dest_file = os.path.join(dest_root, cr3_name)
                     logger.info("%s file to: %s", copy_msg, dest_file)
                     if os.path.isfile(source_file):
@@ -103,8 +127,8 @@ if __name__ == '__main__':
                         nb_warning += 1
 
                 if args.copy_arw:
+                    source_file = os.path.splitext(filename_to_source_path[name])[0] + '.ARW'
                     arw_name = os.path.splitext(name)[0] + '.ARW'
-                    source_file = os.path.join(args.source_dir, arw_name)
                     dest_file = os.path.join(dest_root, arw_name)
                     logger.info("%s file to: %s", copy_msg, dest_file)
                     if os.path.isfile(source_file):
