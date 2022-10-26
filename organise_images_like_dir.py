@@ -94,7 +94,13 @@ if __name__ == '__main__':
         for name in files:
             ext = os.path.splitext(name)[1][1:].lower()
             if ext == 'jpg':
-                source_file = filename_to_source_path[name]
+                try:
+                    source_file = filename_to_source_path[name]
+                except KeyError:
+                    logger.error("File doesn't exist in source directory: %s", name)
+                    nb_error += 1
+                    continue
+
                 dest_file = os.path.join(dest_root, name)
                 logger.info("%s file to: %s", copy_msg, dest_file)
                 if os.path.isfile(source_file):
