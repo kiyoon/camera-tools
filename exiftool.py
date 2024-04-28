@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # PyExifTool <http://github.com/smarnach/pyexiftool>
 # Copyright 2012 Sven Marnach
 
@@ -55,23 +54,31 @@ Example usage::
 
 from __future__ import unicode_literals
 
-import sys
-import subprocess
-import os
-import json
-import warnings
 import codecs
+import json
+import os
+import shutil
+import subprocess
+import sys
+import warnings
 
-try:        # Py3k compatibility
+try:  # Py3k compatibility
     basestring
 except NameError:
     basestring = (bytes, str)
 
-import platform
-if platform.system() == 'Windows':
-    executable = os.path.dirname(os.path.realpath(__file__)) + "\\exiftool.exe"
-else:
-    executable = os.path.dirname(os.path.realpath(__file__)) + "/exiftool"
+# if exiftool can be found in the path, use it
+# otherwise, use the exiftool executable in the same directory as this script
+
+executable = shutil.which("exiftool")
+print(executable)
+if executable is None or executable == "":
+    import platform
+
+    if platform.system() == "Windows":
+        executable = os.path.dirname(os.path.realpath(__file__)) + "\\exiftool.exe"
+    else:
+        executable = os.path.dirname(os.path.realpath(__file__)) + "/exiftool"
 
 """The name of the executable to run.
 
@@ -87,6 +94,7 @@ sentinel = b"{ready}"
 # should be fine, though other values might give better performance in
 # some cases.
 block_size = 4096
+
 
 # This code has been adapted from Lib/os.py in the Python source tree
 # (sha1 265e36e277f3)
@@ -114,11 +122,14 @@ def _fscodec():
 
     return fsencode
 
+
 fsencode = _fscodec()
 del _fscodec
 
-class ExifTool(object):
-    """Run the `exiftool` command-line tool and communicate to it.
+
+class ExifTool:
+    """
+    Run the `exiftool` command-line tool and communicate to it.
 
     You can pass the file name of the ``exiftool`` executable as an
     argument to the constructor.  The default value ``exiftool`` will
@@ -161,7 +172,8 @@ class ExifTool(object):
         self.running = False
 
     def start(self):
-        """Start an ``exiftool`` process in batch mode for this instance.
+        """
+        Start an ``exiftool`` process in batch mode for this instance.
 
         This method will issue a ``UserWarning`` if the subprocess is
         already running.  The process is started with the ``-G`` and
@@ -173,14 +185,27 @@ class ExifTool(object):
             return
         with open(os.devnull, "w") as devnull:
             self._process = subprocess.Popen(
-                    [self.executable, "-api", "largefilesupport=1", "-stay_open", "True",  "-@", "-",
-                 "-common_args", "-G", "-n"],
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                stderr=devnull)
+                [
+                    self.executable,
+                    "-api",
+                    "largefilesupport=1",
+                    "-stay_open",
+                    "True",
+                    "-@",
+                    "-",
+                    "-common_args",
+                    "-G",
+                    "-n",
+                ],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=devnull,
+            )
         self.running = True
 
     def terminate(self):
-        """Terminate the ``exiftool`` process of this instance.
+        """
+        Terminate the ``exiftool`` process of this instance.
 
         If the subprocess isn't running, this method will do nothing.
         """
@@ -203,7 +228,8 @@ class ExifTool(object):
         self.terminate()
 
     def execute(self, *params):
-        """Execute the given batch of parameters with ``exiftool``.
+        """
+        Execute the given batch of parameters with ``exiftool``.
 
         This method accepts any number of parameters and sends them to
         the attached ``exiftool`` process.  The process must be
@@ -229,10 +255,11 @@ class ExifTool(object):
         fd = self._process.stdout.fileno()
         while not output[-32:].strip().endswith(sentinel):
             output += os.read(fd, block_size)
-        return output.strip()[:-len(sentinel)]
+        return output.strip()[: -len(sentinel)]
 
     def execute_json(self, *params):
-        """Execute the given batch of parameters and parse the JSON output.
+        """
+        Execute the given batch of parameters and parse the JSON output.
 
         This method is similar to :py:meth:`execute()`.  It
         automatically adds the parameter ``-j`` to request JSON output
@@ -257,7 +284,8 @@ class ExifTool(object):
         return json.loads(self.execute(b"-j", *params).decode("utf-8"))
 
     def get_metadata_batch(self, filenames):
-        """Return all meta-data for the given files.
+        """
+        Return all meta-data for the given files.
 
         The return value will have the format described in the
         documentation of :py:meth:`execute_json()`.
@@ -265,7 +293,8 @@ class ExifTool(object):
         return self.execute_json(*filenames)
 
     def get_metadata(self, filename):
-        """Return meta-data for a single file.
+        """
+        Return meta-data for a single file.
 
         The returned dictionary has the format described in the
         documentation of :py:meth:`execute_json()`.
@@ -273,7 +302,8 @@ class ExifTool(object):
         return self.execute_json(filename)[0]
 
     def get_tags_batch(self, tags, filenames):
-        """Return only specified tags for the given files.
+        """
+        Return only specified tags for the given files.
 
         The first argument is an iterable of tags.  The tag names may
         include group names, as usual in the format <group>:<tag>.
@@ -286,17 +316,18 @@ class ExifTool(object):
         # Explicitly ruling out strings here because passing in a
         # string would lead to strange and hard-to-find errors
         if isinstance(tags, basestring):
-            raise TypeError("The argument 'tags' must be "
-                            "an iterable of strings")
+            raise TypeError("The argument 'tags' must be " "an iterable of strings")
         if isinstance(filenames, basestring):
-            raise TypeError("The argument 'filenames' must be "
-                            "an iterable of strings")
+            raise TypeError(
+                "The argument 'filenames' must be " "an iterable of strings"
+            )
         params = ["-" + t for t in tags]
         params.extend(filenames)
         return self.execute_json(*params)
 
     def get_tags(self, tags, filename):
-        """Return only specified tags for a single file.
+        """
+        Return only specified tags for a single file.
 
         The returned dictionary has the format described in the
         documentation of :py:meth:`execute_json()`.
@@ -304,7 +335,8 @@ class ExifTool(object):
         return self.get_tags_batch(tags, [filename])[0]
 
     def get_tag_batch(self, tag, filenames):
-        """Extract a single tag from the given files.
+        """
+        Extract a single tag from the given files.
 
         The first argument is a single tag name, as usual in the
         format <group>:<tag>.
@@ -322,7 +354,8 @@ class ExifTool(object):
         return result
 
     def get_tag(self, tag, filename):
-        """Extract a single tag from a single file.
+        """
+        Extract a single tag from a single file.
 
         The return value is the value of the specified tag, or
         ``None`` if this tag was not found in the file.
