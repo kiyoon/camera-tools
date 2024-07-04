@@ -1,0 +1,22 @@
+name: Commit CHANGELOG.md, create a Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version-tag:
+        description: Version tag
+        required: true
+        default: v0.1.0
+      dry-run:
+        description: Dry run
+        type: boolean
+        default: false
+
+jobs:
+  commit-changelog-and-release:
+    uses: deargen/workflows/.github/workflows/commit-changelog-and-release.yml@master
+    with:
+      version-tag: ${{ github.event.inputs.version-tag }}
+      dry-run: ${{ github.event.inputs.dry-run == true }}
+      changelog-path: docs/CHANGELOG.md
+      exclude-types: build,docs,style,other

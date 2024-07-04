@@ -61,6 +61,7 @@ import shutil
 import subprocess
 import sys
 import warnings
+from pathlib import Path
 
 try:  # Py3k compatibility
     basestring
@@ -71,14 +72,13 @@ except NameError:
 # otherwise, use the exiftool executable in the same directory as this script
 
 executable = shutil.which("exiftool")
-print(executable)
 if executable is None or executable == "":
     import platform
 
     if platform.system() == "Windows":
-        executable = os.path.dirname(os.path.realpath(__file__)) + "\\exiftool.exe"
+        executable = str(Path(__file__).resolve().parent / "exiftool.exe")
     else:
-        executable = os.path.dirname(os.path.realpath(__file__)) + "/exiftool"
+        executable = str(Path(__file__).resolve().parent / "exiftool")
 
 """The name of the executable to run.
 

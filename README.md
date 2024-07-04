@@ -1,72 +1,43 @@
-# Change file names to date taken
+# camera-tools: Collection of useful tools for managing photos and videos
 
-## Requirements
+## 🛠️ Installation
 
-### Ubuntu
+```
+pip install .
+```
 
-`sudo apt install libimage-exiftool-perl`
-
-## Usage
-
-`datename.py *.JPG`
-
-or
-
-`datename.py *.MP4`
+## 📦 Features
+### Change file names to date taken
 
 It will rename the image or video files into the EXIF datetime, whilst creating undo script and json files containing EXIF information.
 
-## Settings Per Camera
-This section describes the "full" option for each camera. Default settings are optimised for Canon M50.
-### Canon M50
+```bash
+# For Canon R6
+camera-tools datename '7E1A*.JPG' '7E1A*.MP4' -p R6_
 
-Default settings are optimised for Canon M50.
+# For Canon M50
+camera-tools datename 'IMG_*.JPG' 'MVI_*.MP4' -p M50_
 
-Below is the recommended options for M50. Prefix, undo, save-exif, and rename-cr3 (compressed RAW) are optional.
+# For Sony a6000
+camera-tools datename 'DSC*.JPG' -p a6000_ --raw-ext ARW --date_source file_modified
+camera-tools datename 'C*.MP4' -p a6000_ --exif-date-key XML:CreationDateValue --exif-date-format "%Y:%m:%d %H:%M:%S%z"
 
-`datename.py --prefix M50_ --date EXIF --exif-date Composite:SubSecCreateDate --undo --save-exif --rename-cr3 *.JPG`
+# For Sony HandyCam
+camera-tools datename '0*.MTS' -p handycam_ --exif-date-key H264:DateTimeOriginal --exif-date-format "%Y:%m:%d %H:%M:%S%z"
+```
 
-### Sony HandyCam
+### Back up files but skip RAW files, and compress video files
 
-Recommended options for Sony HandyCam is:
-
-`datename.py --prefix SonyCam_ --date EXIF --exif-date H264:DateTimeOriginal --undo --save-exif --no-rename-cr3 *.MTS`
-
-Prefix, undo and save-exif are optional.
-
-# Back up files but skip RAW files, and compress video files
-
-## Requirements
-
-`pip3 install coloredlogs verboselogs`
-
-ffmpeg with NVIDIA hardware acceleration enabled.
-
-## Usage
+Requirements: ffmpeg with NVIDIA hardware acceleration enabled.
 
 `backup_camera_dir_compress_video.py /home/user/Picture/Canon /home/user/onedrive/Photo/Canon`
 
 
 
-# Bulk resize images
-
-## Requirements
-
-`pip3 install coloredlogs verboselogs pillow piexif`
-
-
-## Usage
+### Bulk resize images
 
 `bulk_image_resize.py /home/user/Picture/Canon /home/user/Picture/Canon_resized`
 
 
-# SRT to YouTube Chapters (and framerate conversion)
-
-## Requirements for GUI
-`pip3 install srt`
-
-## Requirements for CUI
-
-`pip3 install srt coloredlogs verboselogs`
-
+### SRT to YouTube Chapters (and framerate conversion)
 
