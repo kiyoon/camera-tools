@@ -31,7 +31,7 @@ from datetime import datetime
 from enum import Enum
 from os import PathLike
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Any, Optional
 
 import tqdm
 import typer
@@ -82,6 +82,23 @@ def path_no_overwrite_counter(path: str | PathLike, zfill=2):
             path = Path(path_wo_ext + "_" + str(counter).zfill(zfill) + fext)
 
     return path
+
+
+def get_exif_batch(input_files: list[str]):
+    glob_input_files = []
+    for origpath in input_files:
+        for path in glob.glob(origpath):  # glob: Windows wildcard support
+            glob_input_files.append(path)
+
+    # parallelly get exif data
+    with exiftool.ExifTool() as et:
+        metadata = et.get_metadata_batch(glob_input_files)
+
+    result: dict[str, dict[str, Any]] = {}
+    for glob_input_file, metadatum in zip(glob_input_files, metadata, strict=True):
+        result[glob_input_file] = metadatum
+
+    return result
 
 
 class DateSourceOption(str, Enum):
@@ -169,6 +186,10 @@ def datename(
 
         progress = tqdm.tqdm(desc="Renaming", total=num_jpg_files)
 
+        if date_source == DateSourceOption.EXIF:
+            tqdm.tqdm.write("Getting all EXIF data...")
+            input_file_to_exif = get_exif_batch(input_files)
+
         for origpath in input_files:
             for path in glob.glob(origpath):  # glob: Windows wildcard support
                 path = Path(path)
@@ -178,13 +199,15 @@ def datename(
 
                 metadata = None
                 if date_source == DateSourceOption.EXIF:
-                    with exiftool.ExifTool() as et:
-                        metadata = et.get_metadata(str(path))
+                    # with exiftool.ExifTool() as et:
+                    #     metadata = et.get_metadata(str(path))
+                    metadata = input_file_to_exif[str(path)]
 
                     exif_date = metadata[exif_date_key]
+                    # Python3.6 can't parse %z with colon (e.g. +09:00) so delete the colon (e.g. +0900)
                     exif_date = re.sub(
                         "([+-])([0-9]{2}):([0-9]{2})", r"\1\2\3", exif_date
-                    )  # Python3.6 can't parse %z with colon (e.g. +09:00) so delete the colon (e.g. +0900)
+                    )
 
                     photo_date = datetime.strptime(exif_date, exif_date_format)
                     # new_fname = metadata[args.exif_date]
@@ -205,8 +228,9 @@ def datename(
                 ] + photo_date.strftime("%z")
 
                 new_path_wo_ext = root / (prefix + new_fname)
-                # new_path = Path(str(new_path_wo_ext) + fext)
-                new_path = new_path_wo_ext.with_suffix(fext)
+
+                # NOTE: filename contains dot, so we can't use with_suffix
+                new_path = Path(str(new_path_wo_ext) + fext)
 
                 new_path = path_no_overwrite_counter(new_path)
 
@@ -217,9 +241,9 @@ def datename(
                 if rename_raw and fext.lower() in ["jpg", ".jpg"]:
                     raw_path = Path(root) / (fname + "." + raw_ext)
                     if raw_path.exists():
-                        raw_new_path = new_path_wo_ext.with_suffix("." + raw_ext)
+                        # NOTE: filename contains dot, so we can't use with_suffix
+                        raw_new_path = Path(str(new_path_wo_ext) + "." + raw_ext)
                         raw_new_path = path_no_overwrite_counter(raw_new_path)
-                        # print(raw_path + " -> " + raw_new_path)
                         tqdm.tqdm.write(f"{raw_path} -> {raw_new_path}")
                         raw_path.rename(raw_new_path)
                         raw_renamed = True
@@ -232,7 +256,7 @@ def datename(
                     with exiftool.ExifTool() as et:
                         metadata = et.get_metadata(new_path)
 
-                with open(new_path.with_suffix(".json"), "w") as f:
+                with open(str(new_path) + ".json", "w") as f:
                     f.write(pprint.pformat(metadata, indent=4))
 
                 progress.update(1)
