@@ -1,46 +1,59 @@
 #!/usr/bin/env python3
 
-import zipfile
-import tqdm
-
+import argparse
 import os
 import sys
-import argparse
-import coloredlogs, logging, verboselogs
+import zipfile
+from pathlib import Path
+
+import coloredlogs
+import tqdm
+import verboselogs
 
 
-class Formatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):
+class Formatter(
+    argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter
+):
     pass
 
+
 parser = argparse.ArgumentParser(
-        description='''Archive all of the images to a zip file, but skip the rest of the files.
-Author: Kiyoon Kim (yoonkr33@gmail.com)''',
-        formatter_class=Formatter)
-parser.add_argument('source_dir', type=str, 
-        help='Directory to archive')
-parser.add_argument('destination_file', type=str,
-        help='Destination zip file path')
-parser.add_argument('--ext', type=str, nargs='*', default=['JPG', 'PNG'],
-        help='Image file extensions to find.')
-parser.add_argument('--subdirs', type=str, nargs='*',
-        help="Name of the subdirectories to zip. If not specified, archive all files regardless of the directory they're put in.")
+    description="""Archive all of the images to a zip file, but skip the rest of the files.
+Author: Kiyoon Kim (yoonkr33@gmail.com)""",
+    formatter_class=Formatter,
+)
+parser.add_argument("source_dir", type=str, help="Directory to archive")
+parser.add_argument("destination_file", type=str, help="Destination zip file path")
+parser.add_argument(
+    "--ext",
+    type=str,
+    nargs="*",
+    default=["JPG", "PNG"],
+    help="Image file extensions to find.",
+)
+parser.add_argument(
+    "--subdirs",
+    type=str,
+    nargs="*",
+    help="Name of the subdirectories to zip. If not specified, archive all files regardless of the directory they're put in.",
+)
 
 args = parser.parse_args()
 
 
-
-if __name__ == '__main__':
-
+if __name__ == "__main__":
     logger = verboselogs.VerboseLogger(__name__)
-    coloredlogs.install(fmt='%(asctime)s - %(levelname)s - %(message)s', level='INFO', logger=logger)
+    coloredlogs.install(
+        fmt="%(asctime)s - %(levelname)s - %(message)s", level="INFO", logger=logger
+    )
 
     nb_error = 0
     nb_warning = 0
 
-    args.source_dir = args.source_dir.rstrip('\\')
-    args.source_dir = args.source_dir.rstrip('/')
+    args.source_dir = args.source_dir.rstrip("\\")
+    args.source_dir = args.source_dir.rstrip("/")
 
-    destination_dir = os.path.dirname(os.path.realpath(args.destination_file))
+    destination_dir = Path(os.path.realpath(args.destination_file)).parent
     logger.info("Creating directory: %s", destination_dir)
     os.makedirs(destination_dir, exist_ok=True)
 
@@ -48,12 +61,11 @@ if __name__ == '__main__':
 
     logger.info("Creating zip file: %s", args.destination_file)
     if os.path.isfile(args.destination_file):
-        overwrite = input("File already exists. Overwrite? (y/n) ").lower() == 'y'
+        overwrite = input("File already exists. Overwrite? (y/n) ").lower() == "y"
         if not overwrite:
             sys.exit(1)
-            
 
-    zip_io = zipfile.ZipFile(args.destination_file, 'w', zipfile.ZIP_STORED)
+    zip_io = zipfile.ZipFile(args.destination_file, "w", zipfile.ZIP_STORED)
 
     if args.subdirs is not None and len(args.subdirs) > 0:
         source_dirs = [os.path.join(args.source_dir, subdir) for subdir in args.subdirs]
@@ -68,8 +80,7 @@ if __name__ == '__main__':
                 if ext in exts:
                     num_files_to_zip += 1
 
-
-    progress = tqdm.tqdm(desc='Archiving', total=num_files_to_zip)
+    progress = tqdm.tqdm(desc="Archiving", total=num_files_to_zip)
 
     for source_dir in source_dirs:
         for root, dirs, files in os.walk(source_dir):

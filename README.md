@@ -36,7 +36,9 @@ Requirements: ffmpeg with NVIDIA hardware acceleration enabled.
 
 ### Bulk resize images
 
-`bulk_image_resize.py /home/user/Picture/Canon /home/user/Picture/Canon_resized`
+```bash
+camera-tools bulk-image-resize R6_original R6_compressed -r lanczos --watermark
+```
 
 
 ### SRT to YouTube Chapters (and framerate conversion)
