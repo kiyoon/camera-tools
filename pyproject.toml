@@ -140,7 +140,6 @@ diagnosticsMode = "openFilesOnly"
 # reportUndefinedVariable = false  # ruff handles this with F821
 
 pythonVersion = "3.10"
-pythonPlatform = "Linux"
 
 [tool.coverage.report]
 omit = [

@@ -79,8 +79,15 @@ def organise_images_like_dir(
         copy_func = move
         copy_msg = "Moving"
     else:
-        copy_func = copy2
-        copy_msg = "Copying"
+        # in Windows, copy
+        # in Linux and macOS, hard link
+
+        if os.name == "nt":
+            copy_func = copy2
+            copy_msg = "Copying"
+        else:
+            copy_func = os.link
+            copy_msg = "Hard linking"
 
     for root, dirs, files in os.walk(dir_like):
         dest_root = root.replace(dir_like, destination_dir, 1)
@@ -110,8 +117,8 @@ def organise_images_like_dir(
                     nb_error += 1
 
                 if copy_json:
-                    source_file = filename_to_source_path[name].with_suffix(".json")
-                    dest_file = dest_root / Path(name).with_suffix(".json")
+                    source_file = Path(f"{filename_to_source_path[name]}.json")
+                    dest_file = dest_root / f"{name}.json"
                     logger.info("%s file to: %s", copy_msg, dest_file)
 
                     if source_file.is_file():
@@ -122,23 +129,19 @@ def organise_images_like_dir(
 
                 if copy_cr3:
                     source_file = filename_to_source_path[name].with_suffix(".CR3")
-                    cr3_name = os.path.splitext(name)[0] + ".CR3"
-                    dest_file = os.path.join(dest_root, cr3_name)
+                    dest_file = dest_root / Path(name).with_suffix(".CR3")
                     logger.info("%s file to: %s", copy_msg, dest_file)
-                    if os.path.isfile(source_file):
+                    if source_file.is_file():
                         copy_func(source_file, dest_file)
                     else:
                         logger.warning("File doesn't exist: %s", source_file)
                         nb_warning += 1
 
                 if copy_arw:
-                    source_file = (
-                        os.path.splitext(filename_to_source_path[name])[0] + ".ARW"
-                    )
-                    arw_name = os.path.splitext(name)[0] + ".ARW"
-                    dest_file = os.path.join(dest_root, arw_name)
+                    source_file = filename_to_source_path[name].with_suffix(".ARW")
+                    dest_file = dest_root / Path(name).with_suffix(".ARW")
                     logger.info("%s file to: %s", copy_msg, dest_file)
-                    if os.path.isfile(source_file):
+                    if source_file.is_file():
                         copy_func(source_file, dest_file)
                     else:
                         logger.warning("File doesn't exist: %s", source_file)
