@@ -1,6 +1,5 @@
 import os
 import sys
-from os import PathLike
 from pathlib import Path
 from shutil import copy2, move
 from typing import Annotated
@@ -11,11 +10,9 @@ import verboselogs
 
 
 def organise_images_like_dir(
-    source_dir: Annotated[str | PathLike, typer.Argument(help="Directory to copy")],
-    destination_dir: Annotated[
-        str | PathLike, typer.Argument(help="Destination directory")
-    ],
-    dir_like: Annotated[str | PathLike, typer.Argument(help="Organised directory.")],
+    source_dir: Annotated[str, typer.Argument(help="Directory to copy")],
+    destination_dir: Annotated[str, typer.Argument(help="Destination directory")],
+    dir_like: Annotated[str, typer.Argument(help="Organised directory.")],
     copy_json: Annotated[
         bool, typer.Option(help="Copy the json files along with the images.")
     ] = True,
@@ -34,6 +31,7 @@ def organise_images_like_dir(
 
     More precisely, match the files with only file names and try to copy.
     The source directory should only have unique file names.
+
     Author: Kiyoon Kim
     """
     logger = verboselogs.VerboseLogger(__name__)
