@@ -2,18 +2,13 @@ import os
 from pathlib import Path
 from typing import Annotated
 
-import piexif
 import typer
 import verboselogs
-from PIL import Image
 
-from camera_tools.utils.burn_signature import watermark_signature
 from camera_tools.utils.log import setup_logging
-from camera_tools.utils.pil import resample_str_to_pil_code
-from camera_tools.utils.pil_transpose import exif_transpose_delete_exif
 
 
-def bulk_image_resize(
+def fast_image_resize(
     source_dir: str,
     destination_dir: str,
     divide: Annotated[
@@ -53,10 +48,17 @@ def bulk_image_resize(
     ] = ["JPG", "PNG"],
 ):
     """
-    Resize all of the images and output to another directory.
-
-    Author: Kiyoon Kim
+    Resize all of the images and output to another directory, faster using zune-image library.
     """
+    import zil
+
+    if resample == "bicubic":
+        resample_method = zil.ResizeMethod.Bicubic
+    elif resample == "bilinear":
+        resample_method = zil.ResizeMethod.Bilinear
+    else:
+        raise ValueError(f"Invalid resample method: {resample}")
+
     logger = verboselogs.VerboseLogger(__name__)
     setup_logging()
 
@@ -95,8 +97,9 @@ def bulk_image_resize(
 
                 if ext in exts:
                     logger.info("Resizing file to: %s", dest_file)
-                    img = Image.open(source_file)
-                    src_width, src_height = img.size
+                    img = zil.Image.open(str(source_file))
+                    img.auto_orient(in_place=True)
+                    src_width, src_height = img.dimensions()
                     if src_height <= minimum_height:
                         logger.info(
                             "Keeping the resolution and re-encoding to: %s", dest_file
@@ -118,30 +121,33 @@ def bulk_image_resize(
                         else:
                             logger.info("Resizing file to: %s", dest_file)
 
-                    img = img.resize(
-                        (dest_width, dest_height),
-                        resample=resample_str_to_pil_code(resample),
+                    img.resize(
+                        dest_width,
+                        dest_height,
+                        method=resample_method,
+                        in_place=True,
                     )
 
-                    if "exif" in img.info:
-                        # Change EXIF resolution info.
-                        exif_dict = piexif.load(img.info["exif"])
-                        # exif_dict['0th'][piexif.ImageIFD.ImageWidth] = width
-                        # exif_dict['0th'][piexif.ImageIFD.ImageLength] = height
-                        exif_dict["Exif"][piexif.ExifIFD.PixelXDimension] = dest_width
-                        exif_dict["Exif"][piexif.ExifIFD.PixelYDimension] = dest_height
-                        exif_bytes = piexif.dump(exif_dict)
-
-                        if watermark:
-                            img, _, inverse_transpose = exif_transpose_delete_exif(img)
-                            img = watermark_signature(img).convert("RGB")
-                            if inverse_transpose is not None:
-                                img = img.transpose(inverse_transpose)
-                        img.save(dest_file, quality=quality, exif=exif_bytes)
-                    else:
-                        if watermark:
-                            img = watermark_signature(img).convert("RGB")
-                        img.save(dest_file, quality=quality)
+                    # if "exif" in img.info:
+                    #     # Change EXIF resolution info.
+                    #     exif_dict = piexif.load(img.info["exif"])
+                    #     # exif_dict['0th'][piexif.ImageIFD.ImageWidth] = width
+                    #     # exif_dict['0th'][piexif.ImageIFD.ImageLength] = height
+                    #     exif_dict["Exif"][piexif.ExifIFD.PixelXDimension] = dest_width
+                    #     exif_dict["Exif"][piexif.ExifIFD.PixelYDimension] = dest_height
+                    #     exif_bytes = piexif.dump(exif_dict)
+                    #
+                    #     if watermark:
+                    #         img, _, inverse_transpose = exif_transpose_delete_exif(img)
+                    #         img = watermark_signature(img).convert("RGB")
+                    #         if inverse_transpose is not None:
+                    #             img = img.transpose(inverse_transpose)
+                    #     img.save(dest_file, quality=quality, exif=exif_bytes)
+                    # else:
+                    #     if watermark:
+                    #         img = watermark_signature(img).convert("RGB")
+                    #     img.save(dest_file, quality=quality)
+                    img.save(str(dest_file), format=zil.ImageFormat.JPEG)
 
     if nb_warning > 0:
         logger.warning("%d warning(s) found.", nb_warning)

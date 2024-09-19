@@ -40,6 +40,11 @@ Requirements: ffmpeg with NVIDIA hardware acceleration enabled.
 camera-tools bulk-image-resize R6_original R6_compressed -r lanczos --watermark
 ```
 
+Experimental faster version using zune-image (rust):
+
+```bash
+camera-tools fast-image-resize R6_original R6_compressed
+```
 
 ### SRT to YouTube Chapters (and framerate conversion)
 

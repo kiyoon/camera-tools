@@ -56,7 +56,9 @@ def _get_insta_xy_bottom_right(
     return insta_x_right, insta_y_bottom
 
 
-def watermark_signature(img, insta_id="kiyoon0", youtube_name="Kiyoon Kim"):
+def watermark_signature(
+    img: Image.Image, insta_id="kiyoon0", youtube_name="Kiyoon Kim"
+):
     font_size = round(math.sqrt(img.width * img.height) / 50)
     font_logos = ImageFont.truetype(
         SCRIPT_DIR.parent / "fonts" / "FontAwesome.otf", font_size
