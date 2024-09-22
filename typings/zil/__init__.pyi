@@ -1,6 +1,9 @@
 import enum
 from typing import Literal, overload
 
+import numpy as np
+from numpy.typing import NDArray
+
 class ImageFormat(enum.Enum):
     FarbFeld = ...
     JPEG = ...
@@ -61,3 +64,4 @@ class Image:
     def crop(
         self, width: int, height: int, x: int, y: int, *, in_place: bool
     ) -> Image | None: ...
+    def to_numpy(self) -> NDArray[np.uint8]: ...
