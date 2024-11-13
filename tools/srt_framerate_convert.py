@@ -3,46 +3,53 @@
 
 import argparse
 
-class Formatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):
+
+class Formatter(
+    argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter
+):
     pass
 
+
 parser = argparse.ArgumentParser(
-        description='''Convert 24fps SRT files to 23.976 fps.
+    description="""Convert 24fps SRT files to 23.976 fps.
 Davinci Resolve project exports in 24fps even when the project is in 23.976, so this conversion is needed to prevent the SRT files from drifting.
 
-Author: Kiyoon Kim (yoonkr33@gmail.com)''',
-        formatter_class=Formatter)
-parser.add_argument('input_files', type=str, nargs='+',
-        help='files you want to change names into dates')
+Author: Kiyoon Kim (yoonkr33@gmail.com)""",
+    formatter_class=Formatter,
+)
+parser.add_argument(
+    "input_files", type=str, nargs="+", help="files you want to change names into dates"
+)
 
 args = parser.parse_args()
 
-import coloredlogs, logging, verboselogs
-
-import os, sys
 import glob
+import os
+
+import coloredlogs
 import srt
-import datetime
+import verboselogs
 
-import srt_utils
-
+from camera_tools.utils import srt_utils
 
 if __name__ == "__main__":
     logger = verboselogs.VerboseLogger(__name__)
-    coloredlogs.install(fmt='%(asctime)s - %(levelname)s - %(message)s', level='INFO', logger=logger)
+    coloredlogs.install(
+        fmt="%(asctime)s - %(levelname)s - %(message)s", level="INFO", logger=logger
+    )
 
     nb_error = 0
     nb_warning = 0
 
     num_input_files = 0
     for origpath in args.input_files:
-        for path in glob.glob(origpath):    # glob: Windows wildcard support
+        for path in glob.glob(origpath):  # glob: Windows wildcard support
             num_input_files += 1
 
     logger.info("%d files to convert", num_input_files)
 
     for origpath in args.input_files:
-        for source_file in glob.glob(origpath):    # glob: Windows wildcard support
+        for source_file in glob.glob(origpath):  # glob: Windows wildcard support
             root, fname_ext = os.path.split(source_file)
             fname, fext = os.path.splitext(fname_ext)
 
@@ -50,12 +57,12 @@ if __name__ == "__main__":
 
             logger.info("Converting SRT to %s", dest_file)
 
-            with open(source_file, 'r', encoding="utf8") as f:
+            with open(source_file, encoding="utf8") as f:
                 srt_lines = list(srt.parse(f))
 
             srt_utils.srt_drift_fix_NTSC(srt_lines)
 
-            with open(dest_file, 'w', encoding="utf8") as f:
+            with open(dest_file, "w", encoding="utf8") as f:
                 f.write(srt.compose(srt_lines))
 
     if nb_warning > 0:

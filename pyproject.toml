@@ -19,15 +19,16 @@ authors = [
 ]
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.10,<4"
 classifiers = [
   "Programming Language :: Python",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
 ]
-keywords = ["development", "template"]
+keywords = ["camera", "canon", "exif", "photo", "video", "srt"]
 
 [project.urls]
 "Homepage" = "https://github.com/kiyoon/camera-tools" # OPTIONALLY CHANGE
