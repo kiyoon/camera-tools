@@ -4,8 +4,8 @@ from pathlib import Path
 from typing import Annotated
 
 import coloredlogs
-import typer
 import verboselogs
+from cyclopts import Parameter
 from PIL import Image
 
 from camera_tools.utils.pil import resample_str_to_pil_code
@@ -20,26 +20,16 @@ class ResampleOptions(str, Enum):
 
 
 def jpgs_to_gif(
-    source_dir: Annotated[str, typer.Argument(help="Directory to make gif")],
-    divide: Annotated[
-        int,
-        typer.Option(
-            "--divide", "-d", help="Output image resolution is divided by this factor."
-        ),
-    ] = 5,
+    source_dir: str,
+    *,
+    divide: Annotated[int, Parameter(name=["--divide", "-d"])] = 5,
     resample: Annotated[
-        ResampleOptions, typer.Option("--resample", "-r", help="Resampling algorithm.")
+        ResampleOptions, Parameter(name=["--resample", "-r"])
     ] = ResampleOptions.bicubic,
-    num_loops: Annotated[
-        int, typer.Option("--num-loops", "-l", help="Number of loops. 0 means infinite")
-    ] = 0,
-    duration: Annotated[
-        int, typer.Option(help="Duration for each frame in milliseconds.")
-    ] = 200,
-    optimise: Annotated[bool, typer.Option(help="Optimise the output GIFs.")] = True,
-    exts_to_find: Annotated[
-        list[str], typer.Option(help="Image file extensions to find.")
-    ] = ["JPG", "PNG"],
+    num_loops: Annotated[int, Parameter(name=["--num-loops", "-l"])] = 0,
+    duration: int = 200,
+    optimise: bool = True,
+    exts_to_find: list[str] = ["JPG", "PNG"],
 ):
     """
     Find directories that contain images and make them into GIFs.
@@ -47,6 +37,15 @@ def jpgs_to_gif(
     Output filename will be the same as the dir name.
 
     Author: Kiyoon Kim
+
+    Args:
+        source_dir: Directory of images to make a GIF.
+        divide: Output image resolution is divided by this factor.
+        resample: Resampling algorithm.
+        num_loops: Number of loops. 0 means infinite.
+        duration: Duration for each frame in milliseconds.
+        optimise: Optimise the output GIFs.
+        exts_to_find: Image file extensions to find.
     """
     logger = verboselogs.VerboseLogger(__name__)
     coloredlogs.install(

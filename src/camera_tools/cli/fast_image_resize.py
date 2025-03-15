@@ -2,8 +2,8 @@ import os
 from pathlib import Path
 from typing import Annotated
 
-import typer
 import verboselogs
+from cyclopts import Parameter
 
 from camera_tools.utils.log import setup_logging
 
@@ -11,44 +11,26 @@ from camera_tools.utils.log import setup_logging
 def fast_image_resize(
     source_dir: str,
     destination_dir: str,
-    divide: Annotated[
-        int,
-        typer.Option(
-            "--divide",
-            "-d",
-            help="Output image resolution (width, height) is divided by this factor.",
-        ),
-    ] = 2,
-    minimum_height: Annotated[
-        int,
-        typer.Option(
-            "--minimum-height",
-            "-mh",
-            help="Output image resolution (height) do not go below this. "
-            "If the original is smaller, stick to the original resolution. "
-            "Default value is the resolution with Canon R6 when crop mode is enabled.",
-        ),
-    ] = 2272,
-    quality: Annotated[
-        int, typer.Option("--quality", "-q", help="Output image jpeg quality.")
-    ] = 95,
-    resample: Annotated[
-        str, typer.Option("--resample", "-r", help="Resampling algorithm.")
-    ] = "bicubic",
-    watermark: Annotated[
-        bool,
-        typer.Option(
-            "--watermark",
-            "-w",
-            help="Watermark Instagram and YouTube channel on the image.",
-        ),
-    ] = False,
-    exts_to_find: Annotated[
-        list[str], typer.Option("--exts-to-find", help="Image file extensions to find.")
-    ] = ["JPG", "PNG"],
+    *,
+    divide: Annotated[int, Parameter(name=["--divide", "-d"])] = 2,
+    minimum_height: Annotated[int, Parameter(name=["--minimum-height", "-mh"])] = 2272,
+    quality: Annotated[int, Parameter(name=["--quality", "-q"])] = 95,
+    resample: Annotated[str, Parameter(name=["--resample", "-r"])] = "bicubic",
+    watermark: Annotated[bool, Parameter(name=["--watermark", "-w"])] = False,
+    exts_to_find: list[str] = ["JPG", "PNG"],  # noqa: B006
 ):
     """
     Resize all of the images and output to another directory, faster using zune-image library.
+
+    Args:
+        divide: Output image resolution (width, height) is divided by this factor.
+        minimum_height: Output image resolution (height) do not go below this.
+            If the original is smaller, stick to the original resolution.
+            Default value is the resolution with Canon R6 when crop mode is enabled.
+        quality: Output image jpeg quality.
+        resample: Resampling algorithm.
+        watermark: Watermark Instagram and YouTube channel on the image.
+        exts_to_find: Image file extensions to find.
     """
     import zil
 

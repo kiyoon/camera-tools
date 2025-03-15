@@ -2,29 +2,20 @@ import os
 import sys
 from pathlib import Path
 from shutil import copy2, move
-from typing import Annotated
 
 import coloredlogs
-import typer
 import verboselogs
 
 
 def organise_images_like_dir(
-    source_dir: Annotated[str, typer.Argument(help="Directory to copy")],
-    destination_dir: Annotated[str, typer.Argument(help="Destination directory")],
-    dir_like: Annotated[str, typer.Argument(help="Organised directory.")],
-    copy_json: Annotated[
-        bool, typer.Option(help="Copy the json files along with the images.")
-    ] = True,
-    copy_cr3: Annotated[
-        bool, typer.Option(help="Copy the CR3 files along with the images.")
-    ] = True,
-    copy_arw: Annotated[
-        bool, typer.Option(help="Copy the ARW files along with the images.")
-    ] = False,
-    delete_originals: Annotated[
-        bool, typer.Option(help="Move files instead of copying.")
-    ] = False,
+    source_dir: str,
+    destination_dir: str,
+    dir_like: str,
+    *,
+    copy_json: bool = True,
+    copy_cr3: bool = True,
+    copy_arw: bool = False,
+    delete_originals: bool = False,
 ):
     """
     Copy the source directory to destination directory, maintaining the directory structure of another directory.
@@ -33,6 +24,15 @@ def organise_images_like_dir(
     The source directory should only have unique file names.
 
     Author: Kiyoon Kim
+
+    Args:
+        source_dir: Directory to copy.
+        destination_dir: Destination directory.
+        dir_like: Organised directory.
+        copy_json: Copy the json files along with the images.
+        copy_cr3: Copy the CR3 files along with the images.
+        copy_arw: Copy the ARW files along with the images.
+        delete_originals: Move files instead of copying.
     """
     logger = verboselogs.VerboseLogger(__name__)
     coloredlogs.install(

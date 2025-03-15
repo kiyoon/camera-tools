@@ -1,40 +1,16 @@
-# ruff: noqa: PTH207 UP007
-# parser.set_defaults(save_exif=True)
-# parser.add_argument(
-#     "--rename-raw",
-#     dest="rename_raw",
-#     action="store_true",
-#     help=,
-# )
-# parser.add_argument(
-#     "--no-rename-raw",
-#     dest="rename_raw",
-#     action="store_false",
-#     help=,
-# )
-# parser.add_argument("--raw-ext", type=str, default="CR3")
-# parser.add_argument(
-#     "--timezone",
-#     type=str,
-#     help=,
-# )
-# parser.set_defaults(rename_raw=True)
-#
-# args = parser.parse_args()
 import glob
 import os
 import platform
 import pprint
 import re
-import sys
 from datetime import datetime
 from enum import Enum
 from os import PathLike
 from pathlib import Path
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any
 
 import tqdm
-import typer
+from cyclopts import Parameter
 
 from camera_tools import exiftool
 
@@ -109,56 +85,16 @@ class DateSourceOption(str, Enum):
 
 def datename(
     input_files: list[str],
-    prefix: Annotated[
-        str, typer.Option("--prefix", "-p", help="prefix of the output names")
-    ] = "",
-    date_source: Annotated[
-        DateSourceOption, typer.Option(help="source of the date info")
-    ] = DateSourceOption.EXIF,
-    exif_date_key: Annotated[
-        str,
-        typer.Option(
-            help="Which EXIF data to use for the date. "
-            "M50: Composite:SubSecCreateDate, "
-            "Sony Cam: H264:DateTimeOriginal, "
-            "Sony a6000: MakerNotes:SonyDateTime, "
-            "Sony a6000 videos: XML:CreationDateValue"
-        ),
-    ] = "Composite:SubSecCreateDate",
-    exif_date_format: Annotated[
-        str,
-        typer.Option(
-            help="EXIF date format for reading the time. "
-            "M50: %%Y:%%m:%%d %%H:%%M:%%S.%%f%%z, "
-            "Sony a6000/Handycam: %%Y:%%m:%%d %%H:%%M:%%S%%z"
-        ),
-    ] = "%Y:%m:%d %H:%M:%S.%f%z",
-    undo: Annotated[
-        bool,
-        typer.Option(
-            help="Generate an undo script (.datename_undo.sh or .datename_undo.bat)"
-        ),
-    ] = True,
-    save_exif: Annotated[
-        bool,
-        typer.Option(
-            help="Save exif info as json files. Useful backup in case some editing software messes up the exif info."
-        ),
-    ] = True,
-    rename_raw: Annotated[
-        bool, typer.Option(help="Rename RAW files along with the JPG files.")
-    ] = True,
-    raw_ext: Annotated[
-        str, typer.Option(help="Do not rename RAW files along with the JPG files.")
-    ] = "CR3",
-    timezone: Annotated[
-        Optional[str],
-        typer.Option(
-            help="Change timezone (e.g. +0900 means Korea). "
-            "Use when you forgot to reset the timezone when you were abroad. "
-            "Leave it empty if you do not want to change the timezone."
-        ),
-    ] = None,
+    *,
+    prefix: Annotated[str, Parameter(name=["--prefix", "-p"])] = "",
+    date_source: DateSourceOption = DateSourceOption.EXIF,
+    exif_date_key: str = "Composite:SubSecCreateDate",
+    exif_date_format: str = "%Y:%m:%d %H:%M:%S.%f%z",
+    undo: bool = True,
+    save_exif: bool = True,
+    rename_raw: bool = True,
+    raw_ext: str = "CR3",
+    timezone: Annotated[str | None, Parameter(name=["--timezone", "-tz"])] = None,
 ):
     """
     Change file names based on their file/EXIF creation/modified date.
@@ -166,6 +102,25 @@ def datename(
     If you want to undo it, execute .datename_undo.sh or .datename_undo.bat
 
     Author: Kiyoon Kim
+
+    Args:
+        prefix: Prefix of the output names.
+        date_source: Source of the date info.
+        exif_date_key: Which EXIF data to use for the date.
+            M50: Composite:SubSecCreateDate,
+            Sony Cam: H264:DateTimeOriginal,
+            Sony a6000: MakerNotes:SonyDateTime,
+            Sony a6000 videos: XML:CreationDateValue
+        exif_date_format: EXIF date format for reading the time.
+            M50: %Y:%m:%d %H:%M:%S.%f%z,
+            Sony a6000/Handycam: %Y:%m:%d %H:%M:%S%z
+        undo: Generate an undo script (.datename_undo.sh or .datename_undo.bat)
+        save_exif: Save exif info as json files. Useful backup in case some editing software messes up the exif info.
+        rename_raw: Rename RAW files along with the JPG files.
+        raw_ext: Extension of the RAW files.
+        timezone: Change timezone (e.g. +0900 means Korea).
+            Use when you forgot to reset the timezone when you were abroad.
+            Leave it empty if you do not want to change the timezone.
     """
     if undo:
         if platform.system() == "Windows":
